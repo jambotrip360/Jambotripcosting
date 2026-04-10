@@ -718,7 +718,8 @@ Call / WhatsApp: +254710996021`;
           </a>
         </div>
       )}
-    </div>
+</div>
   </div>
+</div>
 );
-}
+}      
