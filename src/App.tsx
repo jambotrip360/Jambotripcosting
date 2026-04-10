@@ -1,6 +1,9 @@
-import React from "react";
+import React, { useState } from "react";
 
 export default function App() {
+  const [destination, setDestination] = useState("");
+  const [budget, setBudget] = useState("");
+
   return (
     <div
       style={{
@@ -28,19 +31,54 @@ export default function App() {
           Smart Travel Costing System
         </p>
 
-        <button
-          style={{
-            backgroundColor: "#0a4fa3",
-            color: "white",
-            border: "none",
-            padding: "12px 20px",
-            borderRadius: "10px",
-            fontSize: "16px",
-            cursor: "pointer",
-          }}
-        >
-          Start Planning
-        </button>
+        <div style={{ display: "grid", gap: "12px" }}>
+          <input
+            type="text"
+            placeholder="Enter destination"
+            value={destination}
+            onChange={(e) => setDestination(e.target.value)}
+            style={{
+              padding: "12px",
+              borderRadius: "10px",
+              border: "1px solid #ccc",
+              fontSize: "16px",
+            }}
+          />
+
+          <input
+            type="number"
+            placeholder="Enter budget"
+            value={budget}
+            onChange={(e) => setBudget(e.target.value)}
+            style={{
+              padding: "12px",
+              borderRadius: "10px",
+              border: "1px solid #ccc",
+              fontSize: "16px",
+            }}
+          />
+
+          <button
+            style={{
+              backgroundColor: "#0a4fa3",
+              color: "white",
+              border: "none",
+              padding: "12px 20px",
+              borderRadius: "10px",
+              fontSize: "16px",
+              cursor: "pointer",
+            }}
+          >
+            Calculate
+          </button>
+        </div>
+
+        {(destination || budget) && (
+          <div style={{ marginTop: "24px" }}>
+            <p><strong>Destination:</strong> {destination || "-"}</p>
+            <p><strong>Budget:</strong> {budget || "-"}</p>
+          </div>
+        )}
       </div>
     </div>
   );
