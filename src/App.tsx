@@ -691,3 +691,33 @@ Call / WhatsApp: +254710996021`;
 >
   {formatKES(perPerson)}
 </p>
+{activeTab === "deployment" && (
+          <div style={{ ...cardStyle, marginTop: "16px" }}>
+            <h2 style={{ color: BRAND.header, marginTop: 0 }}>Deployment</h2>
+            <p style={{ color: "#475569" }}>
+              Your app is live on Vercel and can be shared with clients.
+            </p>
+            <p style={{ color: "#475569" }}>
+              Each time you update your code and run Git push, the live site updates automatically.
+            </p>
+            <a
+              href={WHATSAPP_URL}
+              target="_blank"
+              rel="noreferrer"
+              style={{
+                ...primaryButtonStyle,
+                display: "inline-block",
+                textDecoration: "none",
+                marginTop: "8px",
+              }}
+            >
+              Share on WhatsApp
+            </a>
+          </div>
+        )}
+      </div>
+</div>
+</div>
+</div>
+);
+}
