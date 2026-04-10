@@ -652,20 +652,23 @@ Call / WhatsApp: +254710996021`;
           </div>
         </div>
 
-        <div style={{ marginTop: "18px" }}>
-          <div
-            style={{"16px",
-                    padding: "14px",
-                    backgroundColor: "#F8FAFC",
-                    border: "1px solid #E5EDF5",
-                  }}
-                >
-                  <p style={{ color: "#64748b", fontSize: "14px", margin: 0 }}>Per Person</p>
-                  <p style={{ fontSize: "22px", fontWeight: 700, marginTop: "8px" }}>
-                    {formatKES(perPerson)}
-                  </p>
-                </div>
-
+<div style={{ marginTop: "18px" }}>
+  <div
+    style={{
+      borderRadius: "16px",
+      padding: "14px",
+      backgroundColor: "#F8FAFC",
+      border: "1px solid #E5EDF5",
+    }}
+  >
+    <p style={{ color: "#64748b", fontSize: "14px", margin: 0 }}>
+      Per Person
+    </p>
+    <p style={{ fontSize: "22px", fontWeight: 700, marginTop: "8px" }}>
+      {formatKES(perPerson)}
+    </p>
+  </div>
+</div>
                 <div
                   style={{
                     borderRadius: "16px",
