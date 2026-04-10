@@ -3,16 +3,6 @@ import React, { useState } from "react";
 export default function App() {
   const [destination, setDestination] = useState("");
   const [budget, setBudget] = useState("");
-  const [result, setResult] = useState("");
-
-  const handleCalculate = () => {
-    if (!destination || !budget) {
-      setResult("Please enter both destination and budget.");
-      return;
-    }
-
-    setResult(`Estimated trip to ${destination} with a budget of $${budget}.`);
-  };
 
   return (
     <div
@@ -69,7 +59,6 @@ export default function App() {
           />
 
           <button
-            onClick={handleCalculate}
             style={{
               backgroundColor: "#0a4fa3",
               color: "white",
@@ -84,18 +73,10 @@ export default function App() {
           </button>
         </div>
 
-        {result && (
-          <div
-            style={{
-              marginTop: "24px",
-              padding: "16px",
-              backgroundColor: "#eef4ff",
-              borderRadius: "10px",
-              color: "#0a4fa3",
-              fontWeight: "bold",
-            }}
-          >
-            {result}
+        {(destination || budget) && (
+          <div style={{ marginTop: "24px" }}>
+            <p><strong>Destination:</strong> {destination || "-"}</p>
+            <p><strong>Budget:</strong> {budget || "-"}</p>
           </div>
         )}
       </div>
