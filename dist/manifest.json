@@ -1,22 +1,25 @@
 {
   "name": "Jambo Trip 360",
   "short_name": "JamboTrip",
-  "start_url": ".",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#0F4C81",
-  "description": "Smart Safari Pricing & Quotation System for Travel Agents",
   "orientation": "portrait",
+  "description": "Smart Safari Pricing & Quotation System for Travel Agents",
   "icons": [
     {
       "src": "/icon-192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
       "src": "/icon-512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }
