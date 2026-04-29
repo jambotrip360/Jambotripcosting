@@ -5,6 +5,7 @@
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#0F4C81",
+  "description": "Smart Safari Pricing & Quotation System for Travel Agents",
   "orientation": "portrait",
   "icons": [
     {
