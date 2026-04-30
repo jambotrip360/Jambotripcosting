@@ -57,7 +57,7 @@ const UNLOCK_STORAGE_KEY = "jambo_trip_unlocked";
 const SUBSCRIPTION_EXPIRY_KEY = "jambo_trip_subscription_expiry";
 const ACTIVATION_CODE = "JAMBO30";
 const PAYMENT_AMOUNT = "KES 5,000 per month";
-const WHATSAPP_NUMBER = ""; // later add 2547XXXXXXXX
+const WHATSAPP_NUMBER = "";
 
 const emptyCalculation: CalculationResponse = {
   currencyMode: "KES",
@@ -206,8 +206,6 @@ export default function App() {
   const [boatAdultRate, setBoatAdultRate] = useState("");
   const [boatChildRate, setBoatChildRate] = useState("");
 
-  const [fuelCost, setFuelCost] = useState("");
-  const [driverAllowancePerDay, setDriverAllowancePerDay] = useState("");
   const [markupPercent, setMarkupPercent] = useState("0");
 
   const [calculation, setCalculation] = useState<CalculationResponse>(emptyCalculation);
@@ -221,6 +219,8 @@ export default function App() {
   const [timeLeft, setTimeLeft] = useState("00:00:00");
   const [trialExpired, setTrialExpired] = useState(false);
 
+  const [isMobile, setIsMobile] = useState(false);
+
   const selectedTheme =
     themeOptions.find((theme) => theme.name === themeName) || themeOptions[0];
 
@@ -228,20 +228,41 @@ export default function App() {
   const displayFinalTotal = calculation.displayFinalTotal ?? calculation.finalTotal;
   const displayPricePerPerson = calculation.displayPricePerPerson ?? calculation.pricePerPerson;
 
+  useEffect(() => {
+    const checkScreen = () => setIsMobile(window.innerWidth < 768);
+    checkScreen();
+    window.addEventListener("resize", checkScreen);
+    return () => window.removeEventListener("resize", checkScreen);
+  }, []);
+
+  const responsiveGrid = (desktopColumns: string): React.CSSProperties => ({
+    display: "grid",
+    gridTemplateColumns: isMobile ? "1fr" : desktopColumns,
+    gap: isMobile ? 12 : 14,
+  });
+
+  const responsiveRow = (desktopColumns: string): React.CSSProperties => ({
+    display: "grid",
+    gridTemplateColumns: isMobile ? "1fr" : desktopColumns,
+    gap: 10,
+  });
+
   const pageStyle: React.CSSProperties = {
     minHeight: "100vh",
     background: "linear-gradient(135deg, #f5f9ff 0%, #eef4fb 45%, #ffffff 100%)",
     fontFamily: "Arial, sans-serif",
     color: "#0f172a",
+    overflowX: "hidden",
   };
 
   const cardStyle: React.CSSProperties = {
     background: "rgba(255,255,255,0.96)",
     border: "1px solid #e2e8f0",
-    borderRadius: 24,
+    borderRadius: isMobile ? 18 : 24,
     boxShadow: "0 12px 34px rgba(15,23,42,0.06)",
-    padding: 22,
+    padding: isMobile ? 16 : 22,
     marginBottom: 18,
+    boxSizing: "border-box",
   };
 
   const labelStyle: React.CSSProperties = {
@@ -261,6 +282,7 @@ export default function App() {
     outline: "none",
     boxSizing: "border-box",
     background: "#ffffff",
+    minWidth: 0,
   };
 
   const primaryButton: React.CSSProperties = {
@@ -271,6 +293,7 @@ export default function App() {
     padding: "12px 16px",
     fontWeight: 800,
     cursor: "pointer",
+    width: isMobile ? "100%" : undefined,
   };
 
   const secondaryButton: React.CSSProperties = {
@@ -281,6 +304,7 @@ export default function App() {
     padding: "12px 16px",
     fontWeight: 700,
     cursor: "pointer",
+    width: isMobile ? "100%" : undefined,
   };
 
   useEffect(() => {
@@ -310,9 +334,7 @@ export default function App() {
     }
 
     const savedTrial = localStorage.getItem(TRIAL_STORAGE_KEY);
-    if (savedTrial) {
-      setTrialStartedAt(Number(savedTrial));
-    }
+    if (savedTrial) setTrialStartedAt(Number(savedTrial));
   }, []);
 
   useEffect(() => {
@@ -467,8 +489,8 @@ export default function App() {
       flightChildRate,
       boatAdultRate,
       boatChildRate,
-      fuelCost,
-      driverAllowancePerDay,
+      fuelCost: "0",
+      driverAllowancePerDay: "0",
       markupPercent,
       excludes: excludes.map((item) => item.text.trim()).filter(Boolean),
     }),
@@ -511,8 +533,6 @@ export default function App() {
       flightChildRate,
       boatAdultRate,
       boatChildRate,
-      fuelCost,
-      driverAllowancePerDay,
       markupPercent,
       excludes,
     ]
@@ -545,9 +565,7 @@ export default function App() {
       }
     };
 
-    if (agentInfo && !trialExpired) {
-      runCalculation();
-    }
+    if (agentInfo && !trialExpired) runCalculation();
   }, [payloadForBackend, agentInfo, trialExpired]);
 
   const quoteText = useMemo(() => {
@@ -674,7 +692,7 @@ ${excludesText}
     return (
       <div style={pageStyle}>
         <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 20 }}>
-          <div style={{ ...cardStyle, maxWidth: 560, width: "100%", padding: 32 }}>
+          <div style={{ ...cardStyle, maxWidth: 560, width: "100%", padding: isMobile ? 22 : 32 }}>
             <div
               style={{
                 display: "inline-block",
@@ -690,7 +708,9 @@ ${excludesText}
               2-HOUR FREE TRIAL
             </div>
 
-            <h1 style={{ marginTop: 0, color: "#0F4C81", fontSize: 46 }}>Jambo Trip 360</h1>
+            <h1 style={{ marginTop: 0, color: "#0F4C81", fontSize: isMobile ? 34 : 46 }}>
+              Jambo Trip 360
+            </h1>
             <p style={{ color: "#64748b", lineHeight: 1.7 }}>
               Create your agent account to start the 2-hour trial.
             </p>
@@ -730,7 +750,7 @@ ${excludesText}
     return (
       <div style={pageStyle}>
         <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 20 }}>
-          <div style={{ ...cardStyle, maxWidth: 620, width: "100%", padding: 32, textAlign: "center" }}>
+          <div style={{ ...cardStyle, maxWidth: 620, width: "100%", padding: isMobile ? 20 : 32, textAlign: "center" }}>
             <div
               style={{
                 display: "inline-block",
@@ -794,7 +814,7 @@ ${excludesText}
 
             <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap", marginTop: 20 }}>
               {whatsappLink ? (
-                <a href={whatsappLink} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
+                <a href={whatsappLink} target="_blank" rel="noreferrer" style={{ textDecoration: "none", width: isMobile ? "100%" : undefined }}>
                   <button style={primaryButton}>Send Payment Confirmation</button>
                 </a>
               ) : (
@@ -819,10 +839,18 @@ ${excludesText}
 
   return (
     <div style={pageStyle}>
-      <div style={{ maxWidth: 1520, margin: "0 auto", padding: 18 }}>
-        <div style={{ ...cardStyle, padding: 26 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 20, flexWrap: "wrap", alignItems: "center" }}>
-            <div>
+      <div style={{ maxWidth: 1520, margin: "0 auto", padding: isMobile ? 10 : 18 }}>
+        <div style={{ ...cardStyle, padding: isMobile ? 18 : 26 }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 20,
+              flexWrap: "wrap",
+              alignItems: "center",
+            }}
+          >
+            <div style={{ minWidth: 0 }}>
               <div
                 style={{
                   display: "inline-block",
@@ -838,10 +866,18 @@ ${excludesText}
               >
                 SMART SAFARI PRICING & QUOTATION SYSTEM
               </div>
-              <h1 style={{ margin: 0, fontSize: 50, fontWeight: 900, color: selectedTheme.primary, lineHeight: 1.05 }}>
+              <h1
+                style={{
+                  margin: 0,
+                  fontSize: isMobile ? 34 : 50,
+                  fontWeight: 900,
+                  color: selectedTheme.primary,
+                  lineHeight: 1.05,
+                }}
+              >
                 Jambo Trip 360
               </h1>
-              <p style={{ margin: "10px 0 0", color: "#64748b", fontSize: 20 }}>
+              <p style={{ margin: "10px 0 0", color: "#64748b", fontSize: isMobile ? 15 : 20 }}>
                 Premium safari costing, branded quotation preview, and client delivery.
               </p>
               <p style={{ margin: "10px 0 0", color: "#64748b", fontSize: 14 }}>
@@ -856,12 +892,13 @@ ${excludesText}
 
             <div
               style={{
-                minWidth: 250,
+                width: isMobile ? "100%" : 250,
                 background: `linear-gradient(135deg, ${selectedTheme.primary} 0%, ${selectedTheme.accent} 100%)`,
                 color: "#ffffff",
                 borderRadius: 22,
                 padding: 18,
                 boxShadow: "0 14px 34px rgba(0,0,0,0.12)",
+                boxSizing: "border-box",
               }}
             >
               <div style={{ fontSize: 12, fontWeight: 800, opacity: 0.95 }}>
@@ -874,12 +911,12 @@ ${excludesText}
           </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.15fr) minmax(390px, 0.85fr)", gap: 20, alignItems: "start" }}>
+        <div style={responsiveGrid("minmax(0, 1.15fr) minmax(390px, 0.85fr)")}>
           <div>
             <div style={cardStyle}>
               <h2 style={{ marginTop: 0, marginBottom: 18, fontSize: 22 }}>Agency Details</h2>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+              <div style={responsiveGrid("1fr 1fr")}>
                 <div>
                   <label style={labelStyle}>Company Name</label>
                   <input style={inputStyle} value={companyName} onChange={(e) => setCompanyName(e.target.value)} />
@@ -912,14 +949,14 @@ ${excludesText}
 
               <div style={{ marginTop: 16 }}>
                 <label style={labelStyle}>Company Logo</label>
-                <input type="file" accept="image/*" onChange={handleLogoUpload} />
+                <input type="file" accept="image/*" onChange={handleLogoUpload} style={{ width: "100%" }} />
               </div>
             </div>
 
             <div style={cardStyle}>
               <h2 style={{ marginTop: 0, marginBottom: 18, fontSize: 22 }}>Client Details</h2>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 14 }}>
+              <div style={responsiveGrid("1fr 1fr 1fr 1fr")}>
                 <div>
                   <label style={labelStyle}>Lead Client Name</label>
                   <input style={inputStyle} value={leadClientName} onChange={(e) => setLeadClientName(e.target.value)} />
@@ -946,13 +983,13 @@ ${excludesText}
               </div>
 
               <div style={{ marginTop: 18 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
                   <strong>Destinations</strong>
                   <button style={primaryButton} onClick={addDestination}>Add Destination</button>
                 </div>
 
                 {destinations.map((destination) => (
-                  <div key={destination.id} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 10, marginBottom: 10 }}>
+                  <div key={destination.id} style={{ ...responsiveRow("1fr auto"), marginBottom: 10 }}>
                     <input
                       style={inputStyle}
                       placeholder="Destination"
@@ -971,7 +1008,7 @@ ${excludesText}
               </div>
 
               <div style={{ marginTop: 18 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
                   <strong>Additional Clients</strong>
                   <button style={primaryButton} onClick={addClient}>Add Client</button>
                 </div>
@@ -979,7 +1016,7 @@ ${excludesText}
                 {otherClients.length === 0 && <div style={{ color: "#64748b", fontSize: 14 }}>No additional clients added.</div>}
 
                 {otherClients.map((client) => (
-                  <div key={client.id} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 10, marginBottom: 10 }}>
+                  <div key={client.id} style={{ ...responsiveRow("1fr auto"), marginBottom: 10 }}>
                     <input
                       style={inputStyle}
                       placeholder="Additional client name"
@@ -999,21 +1036,21 @@ ${excludesText}
             </div>
 
             <div style={cardStyle}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 14 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
                 <h2 style={{ margin: 0, fontSize: 22 }}>Hotel Details</h2>
                 <button style={primaryButton} onClick={addHotel}>Add Hotel</button>
               </div>
 
               {hotels.map((hotel, index) => (
                 <div key={hotel.id} style={{ border: "1px solid #e2e8f0", background: "#f8fafc", borderRadius: 20, padding: 16, marginBottom: 14 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
                     <strong>Hotel {index + 1}</strong>
                     <button style={secondaryButton} onClick={() => setHotels((prev) => prev.length === 1 ? prev : prev.filter((item) => item.id !== hotel.id))}>
                       Remove
                     </button>
                   </div>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                  <div style={responsiveGrid("1fr 1fr")}>
                     <div>
                       <label style={labelStyle}>Hotel Name</label>
                       <input
@@ -1092,7 +1129,10 @@ ${excludesText}
 
             <div style={cardStyle}>
               <h2 style={{ marginTop: 0, marginBottom: 18, fontSize: 22 }}>Transport</h2>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+              <p style={{ marginTop: -8, color: "#64748b", fontSize: 14 }}>
+                Transport price should include driver allowance and fuel.
+              </p>
+              <div style={responsiveGrid("1fr 1fr")}>
                 <div>
                   <label style={labelStyle}>Main Transport</label>
                   <input style={inputStyle} value={mainTransport} onChange={(e) => setMainTransport(e.target.value)} />
@@ -1110,7 +1150,7 @@ ${excludesText}
 
             <div style={cardStyle}>
               <h2 style={{ marginTop: 0, marginBottom: 18, fontSize: 22 }}>Park Fees</h2>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+              <div style={responsiveGrid("1fr 1fr")}>
                 <div>
                   <label style={labelStyle}>Resident Adult Fee (KES)</label>
                   <input style={inputStyle} type="number" min="0" value={residentAdultFee} onChange={(e) => setResidentAdultFee(e.target.value)} />
@@ -1131,13 +1171,13 @@ ${excludesText}
             </div>
 
             <div style={cardStyle}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 14 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
                 <h2 style={{ margin: 0, fontSize: 22 }}>Activities</h2>
                 <button style={primaryButton} onClick={addActivity}>Add Activity</button>
               </div>
 
               {activities.map((activity) => (
-                <div key={activity.id} style={{ display: "grid", gridTemplateColumns: "1.2fr 0.8fr 0.8fr auto", gap: 10, marginBottom: 10 }}>
+                <div key={activity.id} style={{ ...responsiveRow("1.2fr 0.8fr 0.8fr auto"), marginBottom: 10 }}>
                   <input
                     style={inputStyle}
                     placeholder="Activity name"
@@ -1175,7 +1215,7 @@ ${excludesText}
 
             <div style={cardStyle}>
               <h2 style={{ marginTop: 0, marginBottom: 18, fontSize: 22 }}>Meals & Other Extras</h2>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+              <div style={responsiveGrid("1fr 1fr")}>
                 <InputField label="Meals Adult Rate" value={mealsAdultRate} setValue={setMealsAdultRate} inputStyle={inputStyle} labelStyle={labelStyle} />
                 <InputField label="Meals Child Rate" value={mealsChildRate} setValue={setMealsChildRate} inputStyle={inputStyle} labelStyle={labelStyle} />
                 <InputField label="Group Buffet Rate" value={groupMealBuffetRate} setValue={setGroupMealBuffetRate} inputStyle={inputStyle} labelStyle={labelStyle} />
@@ -1187,20 +1227,18 @@ ${excludesText}
                 <InputField label="Flight Child Rate" value={flightChildRate} setValue={setFlightChildRate} inputStyle={inputStyle} labelStyle={labelStyle} />
                 <InputField label="Boat Adult Rate" value={boatAdultRate} setValue={setBoatAdultRate} inputStyle={inputStyle} labelStyle={labelStyle} />
                 <InputField label="Boat Child Rate" value={boatChildRate} setValue={setBoatChildRate} inputStyle={inputStyle} labelStyle={labelStyle} />
-                <InputField label="Fuel Cost" value={fuelCost} setValue={setFuelCost} inputStyle={inputStyle} labelStyle={labelStyle} />
-                <InputField label="Driver Allowance Per Day" value={driverAllowancePerDay} setValue={setDriverAllowancePerDay} inputStyle={inputStyle} labelStyle={labelStyle} />
                 <InputField label="Markup %" value={markupPercent} setValue={setMarkupPercent} inputStyle={inputStyle} labelStyle={labelStyle} />
               </div>
             </div>
 
             <div style={cardStyle}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 14 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
                 <h2 style={{ margin: 0, fontSize: 22 }}>Excludes</h2>
                 <button style={primaryButton} onClick={addExclude}>Add Exclude</button>
               </div>
 
               {excludes.map((item) => (
-                <div key={item.id} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 10, marginBottom: 10 }}>
+                <div key={item.id} style={{ ...responsiveRow("1fr auto"), marginBottom: 10 }}>
                   <input
                     style={inputStyle}
                     placeholder="Excluded item"
@@ -1218,7 +1256,7 @@ ${excludesText}
           </div>
 
           <div>
-            <div style={{ position: "sticky", top: 18 }}>
+            <div style={{ position: isMobile ? "static" : "sticky", top: 18 }}>
               <div style={cardStyle}>
                 <h2 style={{ marginTop: 0, marginBottom: 16, fontSize: 22 }}>Client Quotation</h2>
 
@@ -1239,8 +1277,8 @@ ${excludesText}
               </div>
 
               <div style={{ ...cardStyle, padding: 0, overflow: "hidden" }}>
-                <div style={{ background: `linear-gradient(135deg, ${selectedTheme.primary} 0%, ${selectedTheme.accent} 100%)`, color: "#ffffff", padding: 24 }}>
-                  <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
+                <div style={{ background: `linear-gradient(135deg, ${selectedTheme.primary} 0%, ${selectedTheme.accent} 100%)`, color: "#ffffff", padding: isMobile ? 18 : 24 }}>
+                  <div style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: isMobile ? "wrap" : "nowrap" }}>
                     <div style={{ width: 82, height: 82, background: "#ffffff", borderRadius: 12, overflow: "hidden", display: "grid", placeItems: "center", flexShrink: 0 }}>
                       {companyLogo ? (
                         <img src={companyLogo} alt="Company Logo" style={{ width: "100%", height: "100%", objectFit: "contain", padding: 8 }} />
@@ -1249,9 +1287,9 @@ ${excludesText}
                       )}
                     </div>
 
-                    <div>
+                    <div style={{ minWidth: 0 }}>
                       <div style={{ fontSize: 18, fontWeight: 900 }}>{companyName || "Company Name"}</div>
-                      <div style={{ fontSize: 13, marginTop: 5, opacity: 0.95 }}>
+                      <div style={{ fontSize: 13, marginTop: 5, opacity: 0.95, wordBreak: "break-word" }}>
                         {companyPhone || "-"} | {companyEmail || "-"} | {companyWebsite || "-"}
                       </div>
                       <div style={{ fontSize: 13, marginTop: 5, opacity: 0.95 }}>Prepared by: {preparedBy || "-"}</div>
@@ -1259,12 +1297,12 @@ ${excludesText}
                   </div>
                 </div>
 
-                <div style={{ padding: 22 }}>
+                <div style={{ padding: isMobile ? 16 : 22 }}>
                   <h3 style={{ marginTop: 0, marginBottom: 16, fontSize: 20, color: selectedTheme.primary }}>
                     Client Travel Quotation
                   </h3>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 18, paddingBottom: 18, borderBottom: "1px solid #e2e8f0" }}>
+                  <div style={{ ...responsiveGrid("1fr 1fr"), marginBottom: 18, paddingBottom: 18, borderBottom: "1px solid #e2e8f0" }}>
                     <div><strong>Lead Client</strong><br />{leadClientName || "-"}</div>
                     <div><strong>Additional Clients</strong><br />{safeJoin(additionalClientNames)}</div>
                     <div><strong>Destination</strong><br />{safeJoin(destinationNames)}</div>
@@ -1282,15 +1320,15 @@ ${excludesText}
                   <div style={{ marginBottom: 16 }}>
                     <h4 style={{ color: selectedTheme.primary, marginBottom: 10 }}>Package Summary</h4>
                     <div style={{ display: "grid", gap: 8, background: selectedTheme.secondary, borderRadius: 18, padding: 16 }}>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 16, alignItems: "center", fontSize: 18 }}>
+                      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr auto", gap: 8, alignItems: "center", fontSize: 18 }}>
                         <span><strong>Total Package Price</strong></span>
-                        <strong style={{ color: selectedTheme.primary, textAlign: "right", minWidth: 120, maxWidth: 165, wordBreak: "break-word" }}>
+                        <strong style={{ color: selectedTheme.primary, textAlign: isMobile ? "left" : "right", wordBreak: "break-word" }}>
                           {formatMoney(displayFinalTotal, displayCurrency)}
                         </strong>
                       </div>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 16, alignItems: "center", fontSize: 17 }}>
+                      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr auto", gap: 8, alignItems: "center", fontSize: 17 }}>
                         <span><strong>Price Per Person</strong></span>
-                        <strong style={{ color: selectedTheme.accent, textAlign: "right", minWidth: 120, maxWidth: 165, wordBreak: "break-word" }}>
+                        <strong style={{ color: selectedTheme.accent, textAlign: isMobile ? "left" : "right", wordBreak: "break-word" }}>
                           {formatMoney(displayPricePerPerson, displayCurrency)}
                         </strong>
                       </div>
@@ -1301,7 +1339,7 @@ ${excludesText}
                     {isCalculating ? "Calculating..." : calculation.transportCalculationText || "Transport Calculation: -"}
                   </div>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                  <div style={responsiveGrid("1fr 1fr")}>
                     <div>
                       <h4 style={{ color: selectedTheme.primary, marginBottom: 8 }}>Includes</h4>
                       <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.8 }}>
