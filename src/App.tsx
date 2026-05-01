@@ -31,7 +31,8 @@ type ActivityItem = {
 type ExtraItem = {
   id: string;
   name: string;
-  rate: string;
+  adultRate: string;
+  childRate: string;
 };
 
 type ExcludeItem = {
@@ -47,6 +48,8 @@ type TrialStatus = {
   message?: string;
 };
 
+type TripType = "Safari" | "Day Trip" | "Vacation" | "Honeymoon" | "Others";
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
 const TRIAL_EMAIL_KEY = "jambo_trip_trial_email";
 
@@ -61,7 +64,8 @@ export default function App() {
   const [trialLoading, setTrialLoading] = useState(false);
   const [trialError, setTrialError] = useState("");
 
-  const [tripType, setTripType] = useState<"Day Trip" | "Overnight">("Day Trip");
+  const [tripType, setTripType] = useState<TripType>("Safari");
+  const [customTripType, setCustomTripType] = useState("");
 
   const [agencyName, setAgencyName] = useState("");
   const [agencyEmail, setAgencyEmail] = useState("");
@@ -92,7 +96,7 @@ export default function App() {
   ]);
 
   const [extras, setExtras] = useState<ExtraItem[]>([
-    { id: makeId(), name: "", rate: "" },
+    { id: makeId(), name: "", adultRate: "", childRate: "" },
   ]);
 
   const [transportType, setTransportType] = useState("Land Cruiser");
@@ -101,12 +105,10 @@ export default function App() {
 
   const [parkFeeAdult, setParkFeeAdult] = useState("");
   const [parkFeeChild, setParkFeeChild] = useState("");
-  const [parkFeeDays, setParkFeeDays] = useState("");
 
   const [mealType, setMealType] = useState("None");
   const [mealAdultRate, setMealAdultRate] = useState("");
   const [mealChildRate, setMealChildRate] = useState("");
-  const [mealDays, setMealDays] = useState("");
 
   const [markupType, setMarkupType] = useState<"Amount" | "Percentage">("Amount");
   const [markupValue, setMarkupValue] = useState("");
@@ -118,6 +120,14 @@ export default function App() {
   ]);
 
   const toNumber = (value: string) => Number(value) || 0;
+
+  const activeTripType =
+    tripType === "Others" && customTripType.trim()
+      ? customTripType.trim()
+      : tripType;
+
+  const isDayTrip = tripType === "Day Trip";
+  const hasHotelLogic = tripType !== "Day Trip";
 
   useEffect(() => {
     const savedEmail = localStorage.getItem(TRIAL_EMAIL_KEY);
@@ -178,6 +188,11 @@ export default function App() {
   const children = clients.filter((c) => c.type === "Child").length;
   const totalTravellers = adults + children;
 
+  const totalNights = useMemo(() => {
+    if (isDayTrip) return 0;
+    return hotels.reduce((sum, hotel) => sum + toNumber(hotel.nights), 0);
+  }, [hotels, isDayTrip]);
+
   const totals = useMemo(() => {
     let hotelTotal = 0;
     let transportTotal = 0;
@@ -186,7 +201,7 @@ export default function App() {
     let mealsTotal = 0;
     let extrasTotal = 0;
 
-    if (tripType === "Day Trip") {
+    if (isDayTrip) {
       transportTotal = toNumber(transportCostPerDay);
 
       parkFeesTotal =
@@ -206,11 +221,13 @@ export default function App() {
           : toNumber(mealAdultRate) * adults + toNumber(mealChildRate) * children;
 
       extrasTotal = extras.reduce((sum, extra) => {
-        return sum + toNumber(extra.rate) * totalTravellers;
+        return (
+          sum +
+          toNumber(extra.adultRate) * adults +
+          toNumber(extra.childRate) * children
+        );
       }, 0);
-    }
-
-    if (tripType === "Overnight") {
+    } else {
       hotelTotal = hotels.reduce((sum, hotel) => {
         const nights = toNumber(hotel.nights);
         return (
@@ -223,8 +240,8 @@ export default function App() {
       transportTotal = toNumber(transportCostPerDay) * toNumber(transportDays);
 
       parkFeesTotal =
-        toNumber(parkFeeAdult) * adults * toNumber(parkFeeDays) +
-        toNumber(parkFeeChild) * children * toNumber(parkFeeDays);
+        toNumber(parkFeeAdult) * adults * totalNights +
+        toNumber(parkFeeChild) * children * totalNights;
 
       activitiesTotal = activities.reduce((sum, activity) => {
         return (
@@ -237,11 +254,14 @@ export default function App() {
       mealsTotal =
         mealType === "None"
           ? 0
-          : toNumber(mealAdultRate) * adults * toNumber(mealDays) +
-            toNumber(mealChildRate) * children * toNumber(mealDays);
+          : toNumber(mealAdultRate) * adults + toNumber(mealChildRate) * children;
 
       extrasTotal = extras.reduce((sum, extra) => {
-        return sum + toNumber(extra.rate) * totalTravellers;
+        return (
+          sum +
+          toNumber(extra.adultRate) * adults +
+          toNumber(extra.childRate) * children
+        );
       }, 0);
     }
 
@@ -274,22 +294,21 @@ export default function App() {
       pricePerPerson,
     };
   }, [
-    tripType,
+    isDayTrip,
     hotels,
     activities,
     extras,
     adults,
     children,
     totalTravellers,
+    totalNights,
     transportCostPerDay,
     transportDays,
     parkFeeAdult,
     parkFeeChild,
-    parkFeeDays,
     mealType,
     mealAdultRate,
     mealChildRate,
-    mealDays,
     markupType,
     markupValue,
   ]);
@@ -341,7 +360,7 @@ export default function App() {
   };
 
   const includes = [
-    tripType === "Overnight" &&
+    hasHotelLogic &&
       hotels.some((h) => h.name || h.adultRate || h.childRate) &&
       "Accommodation",
     transportType !== "None" && transportCostPerDay && `Transport by ${transportType}`,
@@ -421,23 +440,33 @@ export default function App() {
         <section className="lg:col-span-2 space-y-5">
           <div className="bg-white rounded-2xl shadow p-5">
             <h2 className="text-xl font-bold mb-4">Trip Type</h2>
+
             <select
               value={tripType}
-              onChange={(e) =>
-                setTripType(e.target.value as "Day Trip" | "Overnight")
-              }
+              onChange={(e) => setTripType(e.target.value as TripType)}
               className="border rounded-xl p-3 w-full"
             >
+              <option>Safari</option>
               <option>Day Trip</option>
-              <option>Overnight</option>
+              <option>Vacation</option>
+              <option>Honeymoon</option>
+              <option>Others</option>
             </select>
 
-            {tripType === "Day Trip" && (
-              <p className="text-sm text-slate-600 mt-3">
-                Day Trip logic: Transport is fixed total. Park fees, activities,
-                meals and extras are multiplied by number of travellers.
-              </p>
+            {tripType === "Others" && (
+              <input
+                value={customTripType}
+                onChange={(e) => setCustomTripType(e.target.value)}
+                placeholder="Write custom trip type"
+                className="border rounded-xl p-3 w-full mt-3"
+              />
             )}
+
+            <p className="text-sm text-slate-600 mt-3">
+              {isDayTrip
+                ? "Day Trip: Transport is fixed. Park fees, activities, meals and extras are multiplied by travellers."
+                : "Safari/Vacation/Honeymoon/Others: Hotels use nights. Park fees are multiplied by total nights and travellers."}
+            </p>
           </div>
 
           <div className="bg-white rounded-2xl shadow p-5">
@@ -517,7 +546,7 @@ export default function App() {
             </div>
           </div>
 
-          {tripType === "Overnight" && (
+          {hasHotelLogic && (
             <div className="bg-white rounded-2xl shadow p-5">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-bold">Hotel Details</h2>
@@ -577,14 +606,14 @@ export default function App() {
               <input
                 value={transportCostPerDay}
                 onChange={(e) => setTransportCostPerDay(e.target.value)}
-                placeholder={tripType === "Day Trip" ? "Transport total cost" : "Transport cost per day"}
+                placeholder={isDayTrip ? "Transport total cost" : "Transport cost per day"}
                 className="border rounded-xl p-3"
               />
-              {tripType === "Overnight" && (
+              {!isDayTrip && (
                 <input
                   value={transportDays}
                   onChange={(e) => setTransportDays(e.target.value)}
-                  placeholder="Number of days"
+                  placeholder="Number of transport days"
                   className="border rounded-xl p-3"
                 />
               )}
@@ -593,18 +622,20 @@ export default function App() {
 
           <div className="bg-white rounded-2xl shadow p-5">
             <h2 className="text-xl font-bold mb-4">Park Fees</h2>
-            <div className="grid md:grid-cols-3 gap-3">
+            <div className="grid md:grid-cols-2 gap-3">
               <input value={parkFeeAdult} onChange={(e) => setParkFeeAdult(e.target.value)} placeholder="Adult park fee per person" className="border rounded-xl p-3" />
               <input value={parkFeeChild} onChange={(e) => setParkFeeChild(e.target.value)} placeholder="Child park fee per person" className="border rounded-xl p-3" />
-              {tripType === "Overnight" && (
-                <input value={parkFeeDays} onChange={(e) => setParkFeeDays(e.target.value)} placeholder="Number of days/nights" className="border rounded-xl p-3" />
-              )}
             </div>
+            <p className="text-sm text-slate-600 mt-3">
+              {isDayTrip
+                ? "Day Trip formula: Park fee × number of clients."
+                : "Safari formula: Park fee × total nights × number of clients."}
+            </p>
           </div>
 
           <div className="bg-white rounded-2xl shadow p-5">
             <h2 className="text-xl font-bold mb-4">Meals</h2>
-            <div className="grid md:grid-cols-4 gap-3">
+            <div className="grid md:grid-cols-3 gap-3">
               <select value={mealType} onChange={(e) => setMealType(e.target.value)} className="border rounded-xl p-3">
                 <option>None</option>
                 <option>Buffet</option>
@@ -613,9 +644,6 @@ export default function App() {
               </select>
               <input value={mealAdultRate} onChange={(e) => setMealAdultRate(e.target.value)} placeholder="Adult meal rate per person" className="border rounded-xl p-3" />
               <input value={mealChildRate} onChange={(e) => setMealChildRate(e.target.value)} placeholder="Child meal rate per person" className="border rounded-xl p-3" />
-              {tripType === "Overnight" && (
-                <input value={mealDays} onChange={(e) => setMealDays(e.target.value)} placeholder="Meal days" className="border rounded-xl p-3" />
-              )}
             </div>
           </div>
 
@@ -650,7 +678,7 @@ export default function App() {
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold">Other Extras</h2>
               <button
-                onClick={() => setExtras([...extras, { id: makeId(), name: "", rate: "" }])}
+                onClick={() => setExtras([...extras, { id: makeId(), name: "", adultRate: "", childRate: "" }])}
                 className="bg-blue-700 text-white px-4 py-2 rounded-xl"
               >
                 Add Extra
@@ -659,9 +687,10 @@ export default function App() {
 
             <div className="space-y-3">
               {extras.map((extra) => (
-                <div key={extra.id} className="grid md:grid-cols-3 gap-3">
+                <div key={extra.id} className="grid md:grid-cols-4 gap-3">
                   <input value={extra.name} onChange={(e) => updateExtra(extra.id, "name", e.target.value)} placeholder="Extra name" className="border rounded-xl p-3" />
-                  <input value={extra.rate} onChange={(e) => updateExtra(extra.id, "rate", e.target.value)} placeholder="Rate per person" className="border rounded-xl p-3" />
+                  <input value={extra.adultRate} onChange={(e) => updateExtra(extra.id, "adultRate", e.target.value)} placeholder="Adult rate per person" className="border rounded-xl p-3" />
+                  <input value={extra.childRate} onChange={(e) => updateExtra(extra.id, "childRate", e.target.value)} placeholder="Child rate per person" className="border rounded-xl p-3" />
                   <button onClick={() => setExtras(extras.filter((x) => x.id !== extra.id))} className="border rounded-xl p-3">
                     Remove
                   </button>
@@ -689,18 +718,24 @@ export default function App() {
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span>Trip Type</span>
-                <strong>{tripType}</strong>
+                <strong>{activeTripType}</strong>
               </div>
               <div className="flex justify-between">
                 <span>Travellers</span>
                 <strong>{totalTravellers}</strong>
               </div>
 
-              {tripType === "Overnight" && (
-                <div className="flex justify-between">
-                  <span>Accommodation</span>
-                  <strong>{formatKES(totals.hotelTotal)}</strong>
-                </div>
+              {!isDayTrip && (
+                <>
+                  <div className="flex justify-between">
+                    <span>Total Nights</span>
+                    <strong>{totalNights}</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Accommodation</span>
+                    <strong>{formatKES(totals.hotelTotal)}</strong>
+                  </div>
+                </>
               )}
 
               <div className="flex justify-between">
@@ -762,7 +797,7 @@ export default function App() {
 
               <div className="mt-4">
                 <p className="text-sm text-slate-500">Trip Type</p>
-                <p className="font-semibold">{tripType}</p>
+                <p className="font-semibold">{activeTripType}</p>
               </div>
 
               <div className="mt-4">
