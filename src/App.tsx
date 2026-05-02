@@ -64,8 +64,7 @@ type CalculationResponse = {
   transportCalculationText?: string;
 };
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
-
+const API_BASE = "https://jambo-backend-gnue.onrender.com";
 const AGENT_STORAGE_KEY = "jambo_trip_agent_info";
 const TRIAL_EMAIL_KEY = "jambo_trip_trial_email";
 const TRIAL_PHONE_KEY = "jambo_trip_trial_phone";
