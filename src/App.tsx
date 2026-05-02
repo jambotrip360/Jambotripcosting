@@ -130,7 +130,7 @@ function createHotel(): HotelItem {
 function createActivity(): ActivityItem {
   return {
     id: makeId(),
-    name: "Giraffe Centre",
+    name: "",
     adultRate: "",
     childRate: "",
   };
@@ -174,6 +174,9 @@ function calculateNights(checkIn: string, checkOut: string) {
   return Math.round((end - start) / (1000 * 60 * 60 * 24));
 }
 
+const responsiveTwo = "repeat(auto-fit, minmax(220px, 1fr))";
+const responsiveThree = "repeat(auto-fit, minmax(180px, 1fr))";
+
 export default function App() {
   const [agentName, setAgentName] = useState("");
   const [agentEmail, setAgentEmail] = useState("");
@@ -209,9 +212,9 @@ export default function App() {
   const [hotels, setHotels] = useState<HotelItem[]>([createHotel()]);
   const [activities, setActivities] = useState<ActivityItem[]>([createActivity()]);
   const [excludes, setExcludes] = useState<ExcludeItem[]>([
-    { id: makeId(), text: "International flights" },
-    { id: makeId(), text: "Visa fees" },
-    { id: makeId(), text: "Personal expenses" },
+    { id: makeId(), text: "" },
+    { id: makeId(), text: "" },
+    { id: makeId(), text: "" },
   ]);
 
   const [mainTransport, setMainTransport] = useState("Landcruiser");
@@ -260,6 +263,7 @@ export default function App() {
     background: "linear-gradient(135deg, #f5f9ff 0%, #eef4fb 45%, #ffffff 100%)",
     fontFamily: "Arial, sans-serif",
     color: "#0f172a",
+    overflowX: "hidden",
   };
 
   const cardStyle: React.CSSProperties = {
@@ -269,6 +273,9 @@ export default function App() {
     boxShadow: "0 12px 34px rgba(15,23,42,0.06)",
     padding: 22,
     marginBottom: 18,
+    width: "100%",
+    maxWidth: "100%",
+    boxSizing: "border-box",
   };
 
   const labelStyle: React.CSSProperties = {
@@ -288,6 +295,7 @@ export default function App() {
     outline: "none",
     boxSizing: "border-box",
     background: "#ffffff",
+    minWidth: 0,
   };
 
   const primaryButton: React.CSSProperties = {
@@ -298,6 +306,7 @@ export default function App() {
     padding: "12px 16px",
     fontWeight: 800,
     cursor: "pointer",
+    whiteSpace: "normal",
   };
 
   const secondaryButton: React.CSSProperties = {
@@ -308,6 +317,7 @@ export default function App() {
     padding: "12px 16px",
     fontWeight: 700,
     cursor: "pointer",
+    whiteSpace: "normal",
   };
 
   const additionalClientNames = useMemo(
@@ -324,10 +334,6 @@ export default function App() {
     () => (isDayTrip ? [] : hotels.map((hotel) => hotel.name.trim()).filter(Boolean)),
     [hotels, isDayTrip]
   );
-
-  const totalTravellers = useMemo(() => {
-    return toNumber(adults) + toNumber(children);
-  }, [adults, children]);
 
   const totalNights = useMemo(() => {
     if (isDayTrip) return 0;
@@ -445,9 +451,7 @@ export default function App() {
       displayFinalTotal: finalTotal,
       displayPricePerPerson: pricePerPerson,
       includes,
-      transportCalculationText: isDayTrip
-        ? `Day Trip Transport: ${formatMoney(mainTransportTotal, clientType)} fixed total`
-        : `Transport: ${formatMoney(toNumber(transportPricePerDay), clientType)} × ${toNumber(numberOfDays)} day(s)`,
+      transportCalculationText: "",
     };
   }, [
     adults,
@@ -645,7 +649,7 @@ export default function App() {
           return;
         }
 
-        setCalculation({ ...frontendCalculation, ...data });
+        setCalculation({ ...frontendCalculation, ...data, transportCalculationText: "" });
       } catch (error) {
         console.error("CALCULATION ERROR:", error);
         setCalculation(frontendCalculation);
@@ -903,7 +907,7 @@ ${excludesText}
               2-HOUR FREE TRIAL
             </div>
 
-            <h1 style={{ marginTop: 0, color: "#0F4C81", fontSize: 46 }}>Jambo Trip 360°</h1>
+            <h1 style={{ marginTop: 0, color: "#0F4C81", fontSize: "clamp(32px, 8vw, 46px)" }}>Jambo Trip 360°</h1>
             <p style={{ color: "#64748b", lineHeight: 1.7 }}>
               Create your agent account to start the 2-hour trial.
             </p>
@@ -1031,10 +1035,10 @@ ${excludesText}
 
   return (
     <div style={pageStyle}>
-      <div style={{ maxWidth: 1520, margin: "0 auto", padding: 18 }}>
-        <div style={{ ...cardStyle, padding: 26 }}>
+      <div style={{ maxWidth: 1520, margin: "0 auto", padding: "14px", boxSizing: "border-box" }}>
+        <div style={{ ...cardStyle, padding: 24 }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 20, flexWrap: "wrap", alignItems: "center" }}>
-            <div>
+            <div style={{ minWidth: 0 }}>
               <div
                 style={{
                   display: "inline-block",
@@ -1050,10 +1054,10 @@ ${excludesText}
               >
                 SMART SAFARI PRICING & QUOTATION SYSTEM
               </div>
-              <h1 style={{ margin: 0, fontSize: 50, fontWeight: 900, color: selectedTheme.primary, lineHeight: 1.05 }}>
+              <h1 style={{ margin: 0, fontSize: "clamp(34px, 7vw, 50px)", fontWeight: 900, color: selectedTheme.primary, lineHeight: 1.05 }}>
                 Jambo Trip 360°
               </h1>
-              <p style={{ margin: "10px 0 0", color: "#64748b", fontSize: 20 }}>
+              <p style={{ margin: "10px 0 0", color: "#64748b", fontSize: "clamp(15px, 4vw, 20px)" }}>
                 Premium safari costing, branded quotation preview, and client delivery.
               </p>
               <p style={{ margin: "10px 0 0", color: "#64748b", fontSize: 14 }}>
@@ -1063,7 +1067,7 @@ ${excludesText}
 
             <div
               style={{
-                minWidth: 250,
+                minWidth: 220,
                 background: `linear-gradient(135deg, ${selectedTheme.primary} 0%, ${selectedTheme.accent} 100%)`,
                 color: "#ffffff",
                 borderRadius: 22,
@@ -1081,17 +1085,17 @@ ${excludesText}
           </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.15fr) minmax(390px, 0.85fr)", gap: 20, alignItems: "start" }}>
-          <div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 520px), 1fr))", gap: 20, alignItems: "start" }}>
+          <div style={{ minWidth: 0 }}>
             <div style={cardStyle}>
               <h2 style={{ marginTop: 0, marginBottom: 18, fontSize: 22 }}>Agency Details</h2>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-                <InputText label="Company Name" value={companyName} setValue={setCompanyName} inputStyle={inputStyle} labelStyle={labelStyle} />
-                <InputText label="Prepared By" value={preparedBy} setValue={setPreparedBy} inputStyle={inputStyle} labelStyle={labelStyle} />
-                <InputText label="Phone" value={companyPhone} setValue={setCompanyPhone} inputStyle={inputStyle} labelStyle={labelStyle} />
-                <InputText label="Email" value={companyEmail} setValue={setCompanyEmail} inputStyle={inputStyle} labelStyle={labelStyle} />
-                <InputText label="Website" value={companyWebsite} setValue={setCompanyWebsite} inputStyle={inputStyle} labelStyle={labelStyle} />
+              <div style={{ display: "grid", gridTemplateColumns: responsiveTwo, gap: 14 }}>
+                <InputText label="Company Name" value={companyName} setValue={setCompanyName} inputStyle={inputStyle} labelStyle={labelStyle} placeholder="Company name" />
+                <InputText label="Prepared By" value={preparedBy} setValue={setPreparedBy} inputStyle={inputStyle} labelStyle={labelStyle} placeholder="Prepared by" />
+                <InputText label="Phone" value={companyPhone} setValue={setCompanyPhone} inputStyle={inputStyle} labelStyle={labelStyle} placeholder="Phone number" />
+                <InputText label="Email" value={companyEmail} setValue={setCompanyEmail} inputStyle={inputStyle} labelStyle={labelStyle} placeholder="Company email" />
+                <InputText label="Website" value={companyWebsite} setValue={setCompanyWebsite} inputStyle={inputStyle} labelStyle={labelStyle} placeholder="Website" />
                 <div>
                   <label style={labelStyle}>Company Colour Theme</label>
                   <select style={inputStyle} value={themeName} onChange={(e) => setThemeName(e.target.value)}>
@@ -1111,8 +1115,8 @@ ${excludesText}
             <div style={cardStyle}>
               <h2 style={{ marginTop: 0, marginBottom: 18, fontSize: 22 }}>Client Details</h2>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 14 }}>
-                <InputText label="Lead Client Name" value={leadClientName} setValue={setLeadClientName} inputStyle={inputStyle} labelStyle={labelStyle} />
+              <div style={{ display: "grid", gridTemplateColumns: responsiveThree, gap: 14 }}>
+                <InputText label="Lead Client Name" value={leadClientName} setValue={setLeadClientName} inputStyle={inputStyle} labelStyle={labelStyle} placeholder="Lead client name" />
 
                 <div>
                   <label style={labelStyle}>Client Type / Currency</label>
@@ -1137,18 +1141,18 @@ ${excludesText}
                 </div>
 
                 {tripType === "Others" && (
-                  <InputText label="Custom Trip Type" value={customTripType} setValue={setCustomTripType} inputStyle={inputStyle} labelStyle={labelStyle} />
+                  <InputText label="Custom Trip Type" value={customTripType} setValue={setCustomTripType} inputStyle={inputStyle} labelStyle={labelStyle} placeholder="Write custom trip type" />
                 )}
               </div>
 
               <div style={{ marginTop: 18 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
                   <strong>Destinations</strong>
                   <button style={primaryButton} onClick={addDestination}>Add Destination</button>
                 </div>
 
                 {destinations.map((destination) => (
-                  <div key={destination.id} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 10, marginBottom: 10 }}>
+                  <div key={destination.id} style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 10, marginBottom: 10 }}>
                     <input
                       style={inputStyle}
                       placeholder="Destination"
@@ -1167,7 +1171,7 @@ ${excludesText}
               </div>
 
               <div style={{ marginTop: 18 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
                   <strong>Additional Clients</strong>
                   <button style={primaryButton} onClick={addClient}>Add Client</button>
                 </div>
@@ -1175,7 +1179,7 @@ ${excludesText}
                 {otherClients.length === 0 && <div style={{ color: "#64748b", fontSize: 14 }}>No additional clients added.</div>}
 
                 {otherClients.map((client) => (
-                  <div key={client.id} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 10, marginBottom: 10 }}>
+                  <div key={client.id} style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 10, marginBottom: 10 }}>
                     <input
                       style={inputStyle}
                       placeholder="Additional client name"
@@ -1196,22 +1200,22 @@ ${excludesText}
 
             {!isDayTrip && (
               <div style={cardStyle}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 14 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
                   <h2 style={{ margin: 0, fontSize: 22 }}>Hotel Details</h2>
                   <button style={primaryButton} onClick={addHotel}>Add Hotel</button>
                 </div>
 
                 {hotels.map((hotel, index) => (
                   <div key={hotel.id} style={{ border: "1px solid #e2e8f0", background: "#f8fafc", borderRadius: 20, padding: 16, marginBottom: 14 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
                       <strong>Hotel {index + 1}</strong>
                       <button style={secondaryButton} onClick={() => setHotels((prev) => prev.length === 1 ? prev : prev.filter((item) => item.id !== hotel.id))}>
                         Remove
                       </button>
                     </div>
 
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-                      <HotelInput label="Hotel Name" value={hotel.name} hotelId={hotel.id} field="name" setHotels={setHotels} inputStyle={inputStyle} labelStyle={labelStyle} />
+                    <div style={{ display: "grid", gridTemplateColumns: responsiveTwo, gap: 14 }}>
+                      <HotelInput label="Hotel Name" value={hotel.name} hotelId={hotel.id} field="name" setHotels={setHotels} inputStyle={inputStyle} labelStyle={labelStyle} placeholder="Mara Sopa Lodge" />
                       <div>
                         <label style={labelStyle}>Meal Plan</label>
                         <select
@@ -1239,8 +1243,8 @@ ${excludesText}
 
             <div style={cardStyle}>
               <h2 style={{ marginTop: 0, marginBottom: 18, fontSize: 22 }}>Transport</h2>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-                <InputText label="Main Transport" value={mainTransport} setValue={setMainTransport} inputStyle={inputStyle} labelStyle={labelStyle} />
+              <div style={{ display: "grid", gridTemplateColumns: responsiveTwo, gap: 14 }}>
+                <InputText label="Main Transport" value={mainTransport} setValue={setMainTransport} inputStyle={inputStyle} labelStyle={labelStyle} placeholder="Landcruiser" />
                 <InputField label={isDayTrip ? "Transport Total Cost" : "Transport Price Per Day"} value={transportPricePerDay} setValue={setTransportPricePerDay} inputStyle={inputStyle} labelStyle={labelStyle} />
                 {!isDayTrip && (
                   <InputField label="Number of Days" value={numberOfDays} setValue={setNumberOfDays} inputStyle={inputStyle} labelStyle={labelStyle} />
@@ -1250,30 +1254,25 @@ ${excludesText}
 
             <div style={cardStyle}>
               <h2 style={{ marginTop: 0, marginBottom: 18, fontSize: 22 }}>Park Fees</h2>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+              <div style={{ display: "grid", gridTemplateColumns: responsiveTwo, gap: 14 }}>
                 <InputField label="Resident Adult Fee (KES)" value={residentAdultFee} setValue={setResidentAdultFee} inputStyle={inputStyle} labelStyle={labelStyle} />
                 <InputField label="Resident Child Fee (KES)" value={residentChildFee} setValue={setResidentChildFee} inputStyle={inputStyle} labelStyle={labelStyle} />
                 <InputField label="Non-Resident Adult Fee (USD)" value={nonResidentAdultFee} setValue={setNonResidentAdultFee} inputStyle={inputStyle} labelStyle={labelStyle} />
                 <InputField label="Non-Resident Child Fee (USD)" value={nonResidentChildFee} setValue={setNonResidentChildFee} inputStyle={inputStyle} labelStyle={labelStyle} />
               </div>
-              <p style={{ color: "#64748b", marginBottom: 0 }}>
-                {isDayTrip
-                  ? "Day Trip formula: Park Fee × Number of Clients."
-                  : "Safari/Vacation/Honeymoon/Others formula: Park Fee × Total Nights × Number of Clients."}
-              </p>
             </div>
 
             <div style={cardStyle}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 14 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
                 <h2 style={{ margin: 0, fontSize: 22 }}>Activities</h2>
                 <button style={primaryButton} onClick={addActivity}>Add Activity</button>
               </div>
 
               {activities.map((activity) => (
-                <div key={activity.id} style={{ display: "grid", gridTemplateColumns: "1.2fr 0.8fr 0.8fr auto", gap: 10, marginBottom: 10 }}>
+                <div key={activity.id} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(145px, 1fr))", gap: 10, marginBottom: 10 }}>
                   <input
                     style={inputStyle}
-                    placeholder="Activity name"
+                    placeholder="Giraffe Centre"
                     value={activity.name}
                     onChange={(e) =>
                       setActivities((prev) => prev.map((item) => item.id === activity.id ? { ...item, name: e.target.value } : item))
@@ -1308,7 +1307,7 @@ ${excludesText}
 
             <div style={cardStyle}>
               <h2 style={{ marginTop: 0, marginBottom: 18, fontSize: 22 }}>Meals & Other Extras</h2>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+              <div style={{ display: "grid", gridTemplateColumns: responsiveTwo, gap: 14 }}>
                 <InputField label="Meals Adult Rate" value={mealsAdultRate} setValue={setMealsAdultRate} inputStyle={inputStyle} labelStyle={labelStyle} />
                 <InputField label="Meals Child Rate" value={mealsChildRate} setValue={setMealsChildRate} inputStyle={inputStyle} labelStyle={labelStyle} />
                 <InputField label="Group Buffet Rate" value={groupMealBuffetRate} setValue={setGroupMealBuffetRate} inputStyle={inputStyle} labelStyle={labelStyle} />
@@ -1325,30 +1324,33 @@ ${excludesText}
             </div>
 
             <div style={cardStyle}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 14 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
                 <h2 style={{ margin: 0, fontSize: 22 }}>Excludes</h2>
                 <button style={primaryButton} onClick={addExclude}>Add Exclude</button>
               </div>
 
-              {excludes.map((item) => (
-                <div key={item.id} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 10, marginBottom: 10 }}>
-                  <input
-                    style={inputStyle}
-                    placeholder="Excluded item"
-                    value={item.text}
-                    onChange={(e) =>
-                      setExcludes((prev) => prev.map((entry) => entry.id === item.id ? { ...entry, text: e.target.value } : entry))
-                    }
-                  />
-                  <button style={secondaryButton} onClick={() => setExcludes((prev) => prev.length === 1 ? prev : prev.filter((entry) => entry.id !== item.id))}>
-                    Remove
-                  </button>
-                </div>
-              ))}
+              {excludes.map((item, index) => {
+                const defaultPlaceholders = ["International flights", "Visa fees", "Personal expenses"];
+                return (
+                  <div key={item.id} style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 10, marginBottom: 10 }}>
+                    <input
+                      style={inputStyle}
+                      placeholder={defaultPlaceholders[index] || "Excluded item"}
+                      value={item.text}
+                      onChange={(e) =>
+                        setExcludes((prev) => prev.map((entry) => entry.id === item.id ? { ...entry, text: e.target.value } : entry))
+                      }
+                    />
+                    <button style={secondaryButton} onClick={() => setExcludes((prev) => prev.length === 1 ? prev : prev.filter((entry) => entry.id !== item.id))}>
+                      Remove
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
-          <div>
+          <div style={{ minWidth: 0 }}>
             <div style={{ position: "sticky", top: 18 }}>
               <div style={cardStyle}>
                 <h2 style={{ marginTop: 0, marginBottom: 16, fontSize: 22 }}>Client Quotation</h2>
@@ -1371,7 +1373,7 @@ ${excludesText}
 
               <div style={{ ...cardStyle, padding: 0, overflow: "hidden" }}>
                 <div style={{ background: `linear-gradient(135deg, ${selectedTheme.primary} 0%, ${selectedTheme.accent} 100%)`, color: "#ffffff", padding: 24 }}>
-                  <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
+                  <div style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
                     <div style={{ width: 82, height: 82, background: "#ffffff", borderRadius: 12, overflow: "hidden", display: "grid", placeItems: "center", flexShrink: 0 }}>
                       {companyLogo ? (
                         <img src={companyLogo} alt="Company Logo" style={{ width: "100%", height: "100%", objectFit: "contain", padding: 8 }} />
@@ -1380,9 +1382,9 @@ ${excludesText}
                       )}
                     </div>
 
-                    <div>
-                      <div style={{ fontSize: 18, fontWeight: 900 }}>{companyName || "Company Name"}</div>
-                      <div style={{ fontSize: 13, marginTop: 5, opacity: 0.95 }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 18, fontWeight: 900, wordBreak: "break-word" }}>{companyName || "Company Name"}</div>
+                      <div style={{ fontSize: 13, marginTop: 5, opacity: 0.95, wordBreak: "break-word" }}>
                         {companyPhone || "-"} | {companyEmail || "-"} | {companyWebsite || "-"}
                       </div>
                       <div style={{ fontSize: 13, marginTop: 5, opacity: 0.95 }}>Prepared by: {preparedBy || "-"}</div>
@@ -1390,12 +1392,12 @@ ${excludesText}
                   </div>
                 </div>
 
-                <div style={{ padding: 22 }}>
+                <div style={{ padding: 18 }}>
                   <h3 style={{ marginTop: 0, marginBottom: 16, fontSize: 20, color: selectedTheme.primary }}>
                     Client Travel Quotation
                   </h3>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 18, paddingBottom: 18, borderBottom: "1px solid #e2e8f0" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: responsiveTwo, gap: 12, marginBottom: 18, paddingBottom: 18, borderBottom: "1px solid #e2e8f0", wordBreak: "break-word" }}>
                     <div><strong>Lead Client</strong><br />{leadClientName || "-"}</div>
                     <div><strong>Additional Clients</strong><br />{safeJoin(additionalClientNames)}</div>
                     <div><strong>Destination</strong><br />{safeJoin(destinationNames)}</div>
@@ -1413,29 +1415,25 @@ ${excludesText}
                   <div style={{ marginBottom: 16 }}>
                     <h4 style={{ color: selectedTheme.primary, marginBottom: 10 }}>Package Summary</h4>
                     <div style={{ display: "grid", gap: 8, background: selectedTheme.secondary, borderRadius: 18, padding: 16 }}>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 16, alignItems: "center", fontSize: 18 }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 12, alignItems: "center", fontSize: 17 }}>
                         <span><strong>Total Package Price</strong></span>
-                        <strong style={{ color: selectedTheme.primary, textAlign: "right", minWidth: 120, maxWidth: 165, wordBreak: "break-word" }}>
+                        <strong style={{ color: selectedTheme.primary, textAlign: "right", wordBreak: "break-word" }}>
                           {formatMoney(displayFinalTotal, displayCurrency)}
                         </strong>
                       </div>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 16, alignItems: "center", fontSize: 17 }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 12, alignItems: "center", fontSize: 16 }}>
                         <span><strong>Price Per Person</strong></span>
-                        <strong style={{ color: selectedTheme.accent, textAlign: "right", minWidth: 120, maxWidth: 165, wordBreak: "break-word" }}>
+                        <strong style={{ color: selectedTheme.accent, textAlign: "right", wordBreak: "break-word" }}>
                           {formatMoney(displayPricePerPerson, displayCurrency)}
                         </strong>
                       </div>
                     </div>
                   </div>
 
-                  <div style={{ background: selectedTheme.secondary, border: `1px solid ${selectedTheme.accent}33`, padding: 14, borderRadius: 18, marginBottom: 16, color: selectedTheme.primary, fontWeight: 700 }}>
-                    {isCalculating ? "Calculating..." : calculation.transportCalculationText || "Transport Calculation: -"}
-                  </div>
-
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: responsiveTwo, gap: 14 }}>
                     <div>
                       <h4 style={{ color: selectedTheme.primary, marginBottom: 8 }}>Includes</h4>
-                      <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.8 }}>
+                      <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.8, wordBreak: "break-word" }}>
                         {(calculation.includes || []).map((item, index) => (
                           <li key={`${item}-${index}`}>{item}</li>
                         ))}
@@ -1444,7 +1442,7 @@ ${excludesText}
 
                     <div>
                       <h4 style={{ color: selectedTheme.primary, marginBottom: 8 }}>Excludes</h4>
-                      <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.8 }}>
+                      <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.8, wordBreak: "break-word" }}>
                         {payloadForBackend.excludes.length > 0 ? (
                           payloadForBackend.excludes.map((item: string, index: number) => (
                             <li key={`${item}-${index}`}>{item}</li>
@@ -1487,17 +1485,19 @@ function InputText({
   setValue,
   inputStyle,
   labelStyle,
+  placeholder = "",
 }: {
   label: string;
   value: string;
   setValue: (value: string) => void;
   inputStyle: React.CSSProperties;
   labelStyle: React.CSSProperties;
+  placeholder?: string;
 }) {
   return (
     <div>
       <label style={labelStyle}>{label}</label>
-      <input style={inputStyle} value={value} onChange={(e) => setValue(e.target.value)} />
+      <input style={inputStyle} value={value} placeholder={placeholder} onChange={(e) => setValue(e.target.value)} />
     </div>
   );
 }
@@ -1538,6 +1538,7 @@ function HotelInput({
   inputStyle,
   labelStyle,
   type = "text",
+  placeholder = "",
 }: {
   label: string;
   value: string;
@@ -1547,6 +1548,7 @@ function HotelInput({
   inputStyle: React.CSSProperties;
   labelStyle: React.CSSProperties;
   type?: string;
+  placeholder?: string;
 }) {
   return (
     <div>
@@ -1556,6 +1558,7 @@ function HotelInput({
         type={type}
         min={type === "number" ? "0" : undefined}
         value={value}
+        placeholder={placeholder}
         onChange={(e) =>
           setHotels((prev) =>
             prev.map((item) => item.id === hotelId ? { ...item, [field]: e.target.value } : item)

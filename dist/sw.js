@@ -1,12 +1,13 @@
-self.addEventListener("install", (event) => {
-  console.log("Service Worker installing...");
+self.addEventListener("install", () => {
   self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
-  console.log("Service Worker activated");
+  event.waitUntil(
+    caches.keys().then((keys) => Promise.all(keys.map((key) => caches.delete(key))))
+  );
 });
 
-self.addEventListener("fetch", (event) => {
-  // basic pass-through
+self.addEventListener("fetch", () => {
+  // no cache
 });
