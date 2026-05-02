@@ -1023,9 +1023,7 @@ ${excludesText}
                 </button>
               )}
 
-              <button style={secondaryButton} onClick={resetDemoTrial}>
-                Reset Demo Trial
-              </button>
+              
             </div>
           </div>
         </div>
