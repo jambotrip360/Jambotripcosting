@@ -28,11 +28,13 @@ type TripType = "Safari" | "Day Trip" | "Vacation" | "Honeymoon" | "Others";
 type AgentInfo = {
   name: string;
   email: string;
+  phone: string;
 };
 
 type TrialStatus = {
   allowed: boolean;
   email?: string;
+  phone?: string;
   unlocked?: boolean;
   remainingMs?: number;
   message?: string;
@@ -66,7 +68,7 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
 
 const AGENT_STORAGE_KEY = "jambo_trip_agent_info";
 const TRIAL_EMAIL_KEY = "jambo_trip_trial_email";
-const ACTIVATION_CODE = "JAMBO30";
+const TRIAL_PHONE_KEY = "jambo_trip_trial_phone";
 const PAYMENT_AMOUNT = "KES 5,000 per month";
 const WHATSAPP_NUMBER = "";
 
@@ -145,6 +147,10 @@ function toNumber(value: unknown) {
   return Number.isFinite(n) ? n : 0;
 }
 
+function cleanPhone(value: string) {
+  return value.replace(/\s+/g, "").trim();
+}
+
 function formatMoney(value: number, currency: CurrencyMode = "KES") {
   return new Intl.NumberFormat(currency === "USD" ? "en-US" : "en-KE", {
     style: "currency",
@@ -180,6 +186,7 @@ const responsiveThree = "repeat(auto-fit, minmax(180px, 1fr))";
 export default function App() {
   const [agentName, setAgentName] = useState("");
   const [agentEmail, setAgentEmail] = useState("");
+  const [agentPhone, setAgentPhone] = useState("");
   const [agentInfo, setAgentInfo] = useState<AgentInfo | null>(null);
 
   const [trialStatus, setTrialStatus] = useState<TrialStatus | null>(null);
@@ -190,6 +197,7 @@ export default function App() {
 
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [activationCode, setActivationCode] = useState("");
+  const [activationLoading, setActivationLoading] = useState(false);
 
   const [companyName, setCompanyName] = useState("Jambo Trip 360");
   const [preparedBy, setPreparedBy] = useState("");
@@ -496,6 +504,7 @@ export default function App() {
       themeAccent: selectedTheme.accent,
       agentName: agentInfo?.name || agentName,
       agentEmail: agentInfo?.email || agentEmail,
+      agentPhone: agentInfo?.phone || agentPhone,
       clientEmail,
       leadClientName,
       adults,
@@ -557,6 +566,7 @@ export default function App() {
       agentInfo,
       agentName,
       agentEmail,
+      agentPhone,
       clientEmail,
       leadClientName,
       adults,
@@ -597,6 +607,7 @@ export default function App() {
   useEffect(() => {
     const savedAgent = localStorage.getItem(AGENT_STORAGE_KEY);
     const savedEmail = localStorage.getItem(TRIAL_EMAIL_KEY);
+    const savedPhone = localStorage.getItem(TRIAL_PHONE_KEY);
 
     if (savedAgent) {
       try {
@@ -604,13 +615,14 @@ export default function App() {
         setAgentInfo(parsed);
         setAgentName(parsed.name || "");
         setAgentEmail(parsed.email || "");
+        setAgentPhone(parsed.phone || "");
       } catch {
         localStorage.removeItem(AGENT_STORAGE_KEY);
       }
     }
 
-    if (savedEmail) {
-      checkTrialStatus(savedEmail);
+    if (savedEmail && savedPhone) {
+      checkTrialStatus(savedEmail, savedPhone);
     }
   }, []);
 
@@ -663,13 +675,13 @@ export default function App() {
     }
   }, [payloadForBackend, agentInfo, trialExpired, frontendCalculation]);
 
-  const checkTrialStatus = async (email: string) => {
+  const checkTrialStatus = async (email: string, phone: string) => {
     try {
       setTrialLoading(true);
       setTrialError("");
 
       const response = await fetch(
-        `${API_BASE}/trial/status?email=${encodeURIComponent(email)}`
+        `${API_BASE}/trial/status?email=${encodeURIComponent(email)}&phone=${encodeURIComponent(phone)}`
       );
 
       const data = await response.json();
@@ -690,8 +702,8 @@ export default function App() {
   };
 
   const startTrial = async () => {
-    if (!agentName.trim() || !agentEmail.trim() || !agentEmail.includes("@")) {
-      setTrialError("Please enter agent name and a valid email.");
+    if (!agentName.trim() || !agentEmail.trim() || !agentEmail.includes("@") || !agentPhone.trim()) {
+      setTrialError("Please enter agent name, valid email, and phone number.");
       return;
     }
 
@@ -700,19 +712,21 @@ export default function App() {
       setTrialError("");
 
       const cleanEmail = agentEmail.trim().toLowerCase();
+      const cleanAgentPhone = cleanPhone(agentPhone);
 
       const response = await fetch(`${API_BASE}/trial/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: cleanEmail }),
+        body: JSON.stringify({ email: cleanEmail, phone: cleanAgentPhone }),
       });
 
       const data = await response.json();
 
       if (data.allowed || data.unlocked) {
-        const info = { name: agentName.trim(), email: cleanEmail };
+        const info = { name: agentName.trim(), email: cleanEmail, phone: cleanAgentPhone };
         localStorage.setItem(AGENT_STORAGE_KEY, JSON.stringify(info));
         localStorage.setItem(TRIAL_EMAIL_KEY, cleanEmail);
+        localStorage.setItem(TRIAL_PHONE_KEY, cleanAgentPhone);
 
         setAgentInfo(info);
         setTrialStatus(data);
@@ -731,35 +745,53 @@ export default function App() {
     }
   };
 
-  const activateSubscription = () => {
-    if (activationCode.trim().toUpperCase() !== ACTIVATION_CODE) {
-      alert("Invalid activation code");
+  const activateSubscription = async () => {
+    if (!agentInfo?.email || !agentInfo?.phone || !activationCode.trim()) {
+      alert("Email, phone, and activation code are required.");
       return;
     }
 
-    setIsUnlocked(true);
-    setTrialExpired(false);
-    setActivationCode("");
-    alert("✅ Activated");
-  };
+    try {
+      setActivationLoading(true);
 
-  const resetDemoTrial = () => {
-    localStorage.removeItem(AGENT_STORAGE_KEY);
-    localStorage.removeItem(TRIAL_EMAIL_KEY);
+      const response = await fetch(`${API_BASE}/activate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: agentInfo.email,
+          phone: agentInfo.phone,
+          code: activationCode.trim(),
+        }),
+      });
 
-    setAgentInfo(null);
-    setAgentName("");
-    setAgentEmail("");
-    setTrialStatus(null);
-    setIsUnlocked(false);
-    setTrialExpired(false);
-    setTimeLeft("00:00:00");
+      const data = await response.json();
+
+      if (data.success || data.unlocked) {
+        setIsUnlocked(true);
+        setTrialExpired(false);
+        setActivationCode("");
+        setTrialStatus((prev) =>
+          prev
+            ? { ...prev, allowed: true, unlocked: true, remainingMs: prev.remainingMs || 0 }
+            : { allowed: true, unlocked: true, remainingMs: 0 }
+        );
+        alert("✅ Activation successful");
+      } else {
+        alert(data.message || "Invalid activation code");
+      }
+    } catch {
+      alert("Activation failed. Please check your internet or backend connection.");
+    } finally {
+      setActivationLoading(false);
+    }
   };
 
   const whatsappMessage = encodeURIComponent(
     `Hello, I have completed payment for Jambo Trip 360 activation.\n\nAgent Name: ${
       agentInfo?.name || agentName
-    }\nAgent Email: ${agentInfo?.email || agentEmail}\nAmount: ${PAYMENT_AMOUNT}`
+    }\nAgent Email: ${agentInfo?.email || agentEmail}\nAgent Phone: ${
+      agentInfo?.phone || agentPhone
+    }\nAmount: ${PAYMENT_AMOUNT}`
   );
 
   const whatsappLink = WHATSAPP_NUMBER
@@ -933,6 +965,16 @@ ${excludesText}
                 />
               </div>
 
+              <div>
+                <label style={labelStyle}>Agent Phone / M-Pesa Number</label>
+                <input
+                  style={inputStyle}
+                  value={agentPhone}
+                  placeholder="2547XXXXXXXX"
+                  onChange={(e) => setAgentPhone(e.target.value)}
+                />
+              </div>
+
               {trialError && <p style={{ color: "#dc2626", margin: 0 }}>{trialError}</p>}
 
               <button
@@ -993,22 +1035,26 @@ ${excludesText}
               <p style={{ margin: "6px 0 0", color: "#475569" }}>
                 Email: <strong>{agentInfo.email}</strong>
               </p>
+              <p style={{ margin: "6px 0 0", color: "#475569" }}>
+                Phone: <strong>{agentInfo.phone}</strong>
+              </p>
             </div>
 
             <div style={{ marginTop: 16, textAlign: "left" }}>
               <label style={labelStyle}>Activation Code</label>
               <input
                 style={inputStyle}
-                placeholder="Enter activation code"
+                placeholder="Example: JAMBO-TEST-X7P9K"
                 value={activationCode}
                 onChange={(e) => setActivationCode(e.target.value)}
               />
 
               <button
-                style={{ ...primaryButton, width: "100%", marginTop: 10 }}
+                style={{ ...primaryButton, width: "100%", marginTop: 10, opacity: activationLoading ? 0.7 : 1 }}
                 onClick={activateSubscription}
+                disabled={activationLoading}
               >
-                Activate
+                {activationLoading ? "Activating..." : "Activate"}
               </button>
             </div>
 
@@ -1022,8 +1068,6 @@ ${excludesText}
                   Send Payment Confirmation
                 </button>
               )}
-
-              
             </div>
           </div>
         </div>
@@ -1059,7 +1103,7 @@ ${excludesText}
                 Premium safari costing, branded quotation preview, and client delivery.
               </p>
               <p style={{ margin: "10px 0 0", color: "#64748b", fontSize: 14 }}>
-                Agent: <strong>{agentInfo.name}</strong> | Trial time left: <strong>{isUnlocked ? "Unlocked" : timeLeft}</strong>
+                Agent: <strong>{agentInfo.name}</strong> | Trial: <strong>{isUnlocked ? "Unlocked" : timeLeft}</strong>
               </p>
             </div>
 
