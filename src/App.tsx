@@ -64,7 +64,9 @@ type CalculationResponse = {
   transportCalculationText?: string;
 };
 
-const API_BASE = "https://jambo-backend-gnue.onrender.com";
+const API_BASE =
+  import.meta.env.VITE_API_BASE_URL || "https://jambo-backend-gnue.onrender.com";
+
 const AGENT_STORAGE_KEY = "jambo_trip_agent_info";
 const TRIAL_EMAIL_KEY = "jambo_trip_trial_email";
 const TRIAL_PHONE_KEY = "jambo_trip_trial_phone";
@@ -102,9 +104,7 @@ const themeOptions = [
 ];
 
 function makeId() {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return crypto.randomUUID();
-  }
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
   return Math.random().toString(36).slice(2);
 }
 
@@ -129,12 +129,7 @@ function createHotel(): HotelItem {
 }
 
 function createActivity(): ActivityItem {
-  return {
-    id: makeId(),
-    name: "",
-    adultRate: "",
-    childRate: "",
-  };
+  return { id: makeId(), name: "", adultRate: "", childRate: "" };
 }
 
 function createExclude(): ExcludeItem {
@@ -245,21 +240,15 @@ export default function App() {
   const [flightChildRate, setFlightChildRate] = useState("");
   const [boatAdultRate, setBoatAdultRate] = useState("");
   const [boatChildRate, setBoatChildRate] = useState("");
-
   const [markupPercent, setMarkupPercent] = useState("0");
 
   const [calculation, setCalculation] = useState<CalculationResponse>(emptyCalculation);
   const [isCalculating, setIsCalculating] = useState(false);
   const [sendingEmail, setSendingEmail] = useState(false);
 
-  const selectedTheme =
-    themeOptions.find((theme) => theme.name === themeName) || themeOptions[0];
-
+  const selectedTheme = themeOptions.find((theme) => theme.name === themeName) || themeOptions[0];
   const isDayTrip = tripType === "Day Trip";
-  const displayTripType =
-    tripType === "Others" && customTripType.trim()
-      ? customTripType.trim()
-      : tripType;
+  const displayTripType = tripType === "Others" && customTripType.trim() ? customTripType.trim() : tripType;
 
   const displayCurrency: CurrencyMode = calculation.currencyMode || clientType;
   const displayFinalTotal = calculation.displayFinalTotal ?? calculation.finalTotal;
@@ -344,46 +333,24 @@ export default function App() {
 
   const totalNights = useMemo(() => {
     if (isDayTrip) return 0;
-
-    const nightsFromHotels = hotels.reduce((sum, hotel) => {
-      return sum + calculateNights(hotel.checkIn, hotel.checkOut);
-    }, 0);
-
+    const nightsFromHotels = hotels.reduce((sum, hotel) => sum + calculateNights(hotel.checkIn, hotel.checkOut), 0);
     if (nightsFromHotels > 0) return nightsFromHotels;
-
     return Math.max(0, toNumber(numberOfDays) - 1);
   }, [hotels, isDayTrip, numberOfDays]);
-
-  const getParkFeeRates = () => {
-    if (clientType === "USD") {
-      return {
-        adultRate: toNumber(nonResidentAdultFee),
-        childRate: toNumber(nonResidentChildFee),
-      };
-    }
-
-    return {
-      adultRate: toNumber(residentAdultFee),
-      childRate: toNumber(residentChildFee),
-    };
-  };
 
   const frontendCalculation = useMemo<CalculationResponse>(() => {
     const adultCount = toNumber(adults);
     const childCount = toNumber(children);
     const travellers = adultCount + childCount;
 
-    const parkRates = getParkFeeRates();
+    const adultParkRate = clientType === "USD" ? toNumber(nonResidentAdultFee) : toNumber(residentAdultFee);
+    const childParkRate = clientType === "USD" ? toNumber(nonResidentChildFee) : toNumber(residentChildFee);
 
     const hotelTotal = isDayTrip
       ? 0
       : hotels.reduce((sum, hotel) => {
           const nights = calculateNights(hotel.checkIn, hotel.checkOut) || totalNights;
-          return (
-            sum +
-            toNumber(hotel.doubleRoomRate) * nights +
-            toNumber(hotel.childRate) * childCount * nights
-          );
+          return sum + toNumber(hotel.doubleRoomRate) * nights + toNumber(hotel.childRate) * childCount * nights;
         }, 0);
 
     const mainTransportTotal = isDayTrip
@@ -391,12 +358,13 @@ export default function App() {
       : toNumber(transportPricePerDay) * toNumber(numberOfDays);
 
     const parkFeesTotal = isDayTrip
-      ? parkRates.adultRate * adultCount + parkRates.childRate * childCount
-      : (parkRates.adultRate * adultCount + parkRates.childRate * childCount) * totalNights;
+      ? adultParkRate * adultCount + childParkRate * childCount
+      : (adultParkRate * adultCount + childParkRate * childCount) * totalNights;
 
-    const activitiesTotal = activities.reduce((sum, item) => {
-      return sum + toNumber(item.adultRate) * adultCount + toNumber(item.childRate) * childCount;
-    }, 0);
+    const activitiesTotal = activities.reduce(
+      (sum, item) => sum + toNumber(item.adultRate) * adultCount + toNumber(item.childRate) * childCount,
+      0
+    );
 
     const mealsTotal =
       toNumber(mealsAdultRate) * adultCount +
@@ -413,25 +381,18 @@ export default function App() {
       toNumber(boatAdultRate) * adultCount +
       toNumber(boatChildRate) * childCount;
 
-    const subtotal =
-      hotelTotal +
-      mainTransportTotal +
-      parkFeesTotal +
-      activitiesTotal +
-      mealsTotal +
-      otherTransportTotal;
-
+    const subtotal = hotelTotal + mainTransportTotal + parkFeesTotal + activitiesTotal + mealsTotal + otherTransportTotal;
     const markupAmount = subtotal * (toNumber(markupPercent) / 100);
     const finalTotal = subtotal + markupAmount;
     const pricePerPerson = travellers > 0 ? finalTotal / travellers : 0;
+
+    const activityNames = activities.map((a) => a.name.trim()).filter(Boolean);
 
     const includes = [
       !isDayTrip && hotelNames.length ? "Accommodation" : "",
       mainTransport !== "None" && mainTransport ? `Transport by ${mainTransport}` : "",
       parkFeesTotal > 0 ? "Park Fees" : "",
-      activities.filter((a) => a.name.trim()).length
-        ? `Activities: ${activities.map((a) => a.name.trim()).filter(Boolean).join(", ")}`
-        : "",
+      activityNames.length ? `Activities: ${activityNames.join(", ")}` : "",
       mealsTotal > 0 ? "Meals" : "",
       "Professional driver guide",
     ].filter(Boolean) as string[];
@@ -464,10 +425,10 @@ export default function App() {
     adults,
     children,
     clientType,
-    residentAdultFee,
-    residentChildFee,
     nonResidentAdultFee,
     nonResidentChildFee,
+    residentAdultFee,
+    residentChildFee,
     hotels,
     totalNights,
     isDayTrip,
@@ -620,23 +581,25 @@ export default function App() {
       }
     }
 
-    if (savedEmail && savedPhone) {
-      checkTrialStatus(savedEmail, savedPhone);
-    }
+    if (savedEmail && savedPhone) checkTrialStatus(savedEmail, savedPhone);
   }, []);
 
   useEffect(() => {
-    if (!trialStatus?.remainingMs) return;
+    if (!trialStatus?.remainingMs || isUnlocked) return;
 
     const timer = setInterval(() => {
-      const remaining = Math.max(0, (trialStatus.remainingMs || 0) - 1000);
-      setTrialStatus((prev) => (prev ? { ...prev, remainingMs: remaining } : prev));
-      setTimeLeft(formatTimeLeft(remaining));
+      setTrialStatus((prev) => {
+        if (!prev) return prev;
+        const remaining = Math.max(0, (prev.remainingMs || 0) - 1000);
+        setTimeLeft(formatTimeLeft(remaining));
 
-      if (remaining <= 0 && !isUnlocked) {
-        setTrialExpired(true);
-        clearInterval(timer);
-      }
+        if (remaining <= 0) {
+          setTrialExpired(true);
+          clearInterval(timer);
+        }
+
+        return { ...prev, remainingMs: remaining };
+      });
     }, 1000);
 
     return () => clearInterval(timer);
@@ -669,9 +632,7 @@ export default function App() {
       }
     };
 
-    if (agentInfo && !trialExpired) {
-      runCalculation();
-    }
+    if (agentInfo && !trialExpired) runCalculation();
   }, [payloadForBackend, agentInfo, trialExpired, frontendCalculation]);
 
   const checkTrialStatus = async (email: string, phone: string) => {
@@ -689,12 +650,13 @@ export default function App() {
       if (data.allowed || data.unlocked) {
         setIsUnlocked(Boolean(data.unlocked));
         setTrialExpired(false);
-        setTimeLeft(formatTimeLeft(data.remainingMs || 0));
+        setTimeLeft(data.unlocked ? "Unlocked" : formatTimeLeft(data.remainingMs || 0));
       } else {
         setTrialExpired(true);
+        setTimeLeft("00:00:00");
       }
     } catch {
-      setTrialError("Unable to connect to trial server. Make sure backend is running.");
+      setTrialError("Unable to connect to trial server.");
     } finally {
       setTrialLoading(false);
     }
@@ -731,14 +693,14 @@ export default function App() {
         setTrialStatus(data);
         setIsUnlocked(Boolean(data.unlocked));
         setTrialExpired(false);
-        setTimeLeft(formatTimeLeft(data.remainingMs || 0));
+        setTimeLeft(data.unlocked ? "Unlocked" : formatTimeLeft(data.remainingMs || 0));
       } else {
         setTrialStatus(data);
         setTrialExpired(true);
         setTrialError(data.message || "Trial ended. Please unlock full version.");
       }
     } catch {
-      setTrialError("Unable to start trial. Make sure backend is running.");
+      setTrialError("Unable to start trial. Backend connection failed.");
     } finally {
       setTrialLoading(false);
     }
@@ -771,15 +733,16 @@ export default function App() {
         setActivationCode("");
         setTrialStatus((prev) =>
           prev
-            ? { ...prev, allowed: true, unlocked: true, remainingMs: prev.remainingMs || 0 }
+            ? { ...prev, allowed: true, unlocked: true, remainingMs: 0 }
             : { allowed: true, unlocked: true, remainingMs: 0 }
         );
+        setTimeLeft("Unlocked");
         alert("✅ Activation successful");
       } else {
         alert(data.message || "Invalid activation code");
       }
     } catch {
-      alert("Activation failed. Please check your internet or backend connection.");
+      alert("Activation failed. Please check backend connection.");
     } finally {
       setActivationLoading(false);
     }
@@ -793,9 +756,7 @@ export default function App() {
     }\nAmount: ${PAYMENT_AMOUNT}`
   );
 
-  const whatsappLink = WHATSAPP_NUMBER
-    ? `https://wa.me/${WHATSAPP_NUMBER}?text=${whatsappMessage}`
-    : "";
+  const whatsappLink = WHATSAPP_NUMBER ? `https://wa.me/${WHATSAPP_NUMBER}?text=${whatsappMessage}` : "";
 
   const quoteText = useMemo(() => {
     const excludesText = payloadForBackend.excludes.length
@@ -906,11 +867,8 @@ ${excludesText}
 
       const data = await response.json();
 
-      if (data?.success) {
-        alert(data.message || "Quotation sent successfully");
-      } else {
-        alert(data?.error || data?.message || "Failed to send quotation");
-      }
+      if (data?.success) alert(data.message || "Quotation sent successfully");
+      else alert(data?.error || data?.message || "Failed to send quotation");
     } catch {
       alert("Failed to send quotation");
     } finally {
@@ -938,7 +896,10 @@ ${excludesText}
               2-HOUR FREE TRIAL
             </div>
 
-            <h1 style={{ marginTop: 0, color: "#0F4C81", fontSize: "clamp(32px, 8vw, 46px)" }}>Jambo Trip 360°</h1>
+            <h1 style={{ marginTop: 0, color: "#0F4C81", fontSize: "clamp(32px, 8vw, 46px)" }}>
+              Jambo Trip 360°
+            </h1>
+
             <p style={{ color: "#64748b", lineHeight: 1.7 }}>
               Create your agent account to start the 2-hour trial.
             </p>
@@ -1011,6 +972,7 @@ ${excludesText}
             </div>
 
             <h1 style={{ marginTop: 0, color: "#0F4C81" }}>Unlock Jambo Trip 360°</h1>
+
             <p style={{ color: "#64748b", lineHeight: 1.7 }}>
               Your free trial has ended. Subscribe to continue using the quotation system.
             </p>
@@ -1043,7 +1005,7 @@ ${excludesText}
               <label style={labelStyle}>Activation Code</label>
               <input
                 style={inputStyle}
-                placeholder="Example: JAMBO-TEST-X7P9K"
+                placeholder="Example: JAMBO-JOHN-A8F3K9X"
                 value={activationCode}
                 onChange={(e) => setActivationCode(e.target.value)}
               />
@@ -1063,7 +1025,7 @@ ${excludesText}
                   <button style={primaryButton}>Send Payment Confirmation</button>
                 </a>
               ) : (
-                <button style={primaryButton} onClick={() => alert("Add your WhatsApp number in WHATSAPP_NUMBER first.")}>
+                <button style={primaryButton} onClick={() => alert("Payment confirmation will be added after WhatsApp number setup.")}>
                   Send Payment Confirmation
                 </button>
               )}
@@ -1095,12 +1057,23 @@ ${excludesText}
               >
                 SMART SAFARI PRICING & QUOTATION SYSTEM
               </div>
-              <h1 style={{ margin: 0, fontSize: "clamp(34px, 7vw, 50px)", fontWeight: 900, color: selectedTheme.primary, lineHeight: 1.05 }}>
+
+              <h1
+                style={{
+                  margin: 0,
+                  fontSize: "clamp(34px, 7vw, 50px)",
+                  fontWeight: 900,
+                  color: selectedTheme.primary,
+                  lineHeight: 1.05,
+                }}
+              >
                 Jambo Trip 360°
               </h1>
+
               <p style={{ margin: "10px 0 0", color: "#64748b", fontSize: "clamp(15px, 4vw, 20px)" }}>
                 Premium safari costing, branded quotation preview, and client delivery.
               </p>
+
               <p style={{ margin: "10px 0 0", color: "#64748b", fontSize: 14 }}>
                 Agent: <strong>{agentInfo.name}</strong> | Trial: <strong>{isUnlocked ? "Unlocked" : timeLeft}</strong>
               </p>
@@ -1126,7 +1099,14 @@ ${excludesText}
           </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 520px), 1fr))", gap: 20, alignItems: "start" }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 520px), 1fr))",
+            gap: 20,
+            alignItems: "start",
+          }}
+        >
           <div style={{ minWidth: 0 }}>
             <div style={cardStyle}>
               <h2 style={{ marginTop: 0, marginBottom: 18, fontSize: 22 }}>Agency Details</h2>
@@ -1137,11 +1117,14 @@ ${excludesText}
                 <InputText label="Phone" value={companyPhone} setValue={setCompanyPhone} inputStyle={inputStyle} labelStyle={labelStyle} placeholder="Phone number" />
                 <InputText label="Email" value={companyEmail} setValue={setCompanyEmail} inputStyle={inputStyle} labelStyle={labelStyle} placeholder="Company email" />
                 <InputText label="Website" value={companyWebsite} setValue={setCompanyWebsite} inputStyle={inputStyle} labelStyle={labelStyle} placeholder="Website" />
+
                 <div>
                   <label style={labelStyle}>Company Colour Theme</label>
                   <select style={inputStyle} value={themeName} onChange={(e) => setThemeName(e.target.value)}>
                     {themeOptions.map((theme) => (
-                      <option key={theme.name} value={theme.name}>{theme.name}</option>
+                      <option key={theme.name} value={theme.name}>
+                        {theme.name}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -1186,84 +1169,62 @@ ${excludesText}
                 )}
               </div>
 
-              <div style={{ marginTop: 18 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
-                  <strong>Destinations</strong>
-                  <button style={primaryButton} onClick={addDestination}>Add Destination</button>
-                </div>
+              <DynamicTextList
+                title="Destinations"
+                addText="Add Destination"
+                items={destinations}
+                setItems={setDestinations}
+                createItem={createDestination}
+                inputStyle={inputStyle}
+                primaryButton={primaryButton}
+                secondaryButton={secondaryButton}
+                placeholder="Destination"
+              />
 
-                {destinations.map((destination) => (
-                  <div key={destination.id} style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 10, marginBottom: 10 }}>
-                    <input
-                      style={inputStyle}
-                      placeholder="Destination"
-                      value={destination.name}
-                      onChange={(e) =>
-                        setDestinations((prev) =>
-                          prev.map((item) => item.id === destination.id ? { ...item, name: e.target.value } : item)
-                        )
-                      }
-                    />
-                    <button style={secondaryButton} onClick={() => setDestinations((prev) => prev.length === 1 ? prev : prev.filter((item) => item.id !== destination.id))}>
-                      Remove
-                    </button>
-                  </div>
-                ))}
-              </div>
-
-              <div style={{ marginTop: 18 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
-                  <strong>Additional Clients</strong>
-                  <button style={primaryButton} onClick={addClient}>Add Client</button>
-                </div>
-
-                {otherClients.length === 0 && <div style={{ color: "#64748b", fontSize: 14 }}>No additional clients added.</div>}
-
-                {otherClients.map((client) => (
-                  <div key={client.id} style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 10, marginBottom: 10 }}>
-                    <input
-                      style={inputStyle}
-                      placeholder="Additional client name"
-                      value={client.name}
-                      onChange={(e) =>
-                        setOtherClients((prev) =>
-                          prev.map((item) => item.id === client.id ? { ...item, name: e.target.value } : item)
-                        )
-                      }
-                    />
-                    <button style={secondaryButton} onClick={() => setOtherClients((prev) => prev.filter((item) => item.id !== client.id))}>
-                      Remove
-                    </button>
-                  </div>
-                ))}
-              </div>
+              <DynamicTextList
+                title="Additional Clients"
+                addText="Add Client"
+                items={otherClients}
+                setItems={setOtherClients}
+                createItem={createClient}
+                inputStyle={inputStyle}
+                primaryButton={primaryButton}
+                secondaryButton={secondaryButton}
+                placeholder="Additional client name"
+                emptyText="No additional clients added."
+              />
             </div>
 
             {!isDayTrip && (
               <div style={cardStyle}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
                   <h2 style={{ margin: 0, fontSize: 22 }}>Hotel Details</h2>
-                  <button style={primaryButton} onClick={addHotel}>Add Hotel</button>
+                  <button style={primaryButton} onClick={addHotel}>
+                    Add Hotel
+                  </button>
                 </div>
 
                 {hotels.map((hotel, index) => (
                   <div key={hotel.id} style={{ border: "1px solid #e2e8f0", background: "#f8fafc", borderRadius: 20, padding: 16, marginBottom: 14 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
                       <strong>Hotel {index + 1}</strong>
-                      <button style={secondaryButton} onClick={() => setHotels((prev) => prev.length === 1 ? prev : prev.filter((item) => item.id !== hotel.id))}>
+                      <button style={secondaryButton} onClick={() => setHotels((prev) => (prev.length === 1 ? prev : prev.filter((item) => item.id !== hotel.id)))}>
                         Remove
                       </button>
                     </div>
 
                     <div style={{ display: "grid", gridTemplateColumns: responsiveTwo, gap: 14 }}>
                       <HotelInput label="Hotel Name" value={hotel.name} hotelId={hotel.id} field="name" setHotels={setHotels} inputStyle={inputStyle} labelStyle={labelStyle} placeholder="Mara Sopa Lodge" />
+
                       <div>
                         <label style={labelStyle}>Meal Plan</label>
                         <select
                           style={inputStyle}
                           value={hotel.mealPlan}
                           onChange={(e) =>
-                            setHotels((prev) => prev.map((item) => item.id === hotel.id ? { ...item, mealPlan: e.target.value } : item))
+                            setHotels((prev) =>
+                              prev.map((item) => (item.id === hotel.id ? { ...item, mealPlan: e.target.value } : item))
+                            )
                           }
                         >
                           <option value="BB">BB</option>
@@ -1272,6 +1233,7 @@ ${excludesText}
                           <option value="All Inclusive">All Inclusive</option>
                         </select>
                       </div>
+
                       <HotelInput label="Double Room Rate" type="number" value={hotel.doubleRoomRate} hotelId={hotel.id} field="doubleRoomRate" setHotels={setHotels} inputStyle={inputStyle} labelStyle={labelStyle} />
                       <HotelInput label="Child Rate" type="number" value={hotel.childRate} hotelId={hotel.id} field="childRate" setHotels={setHotels} inputStyle={inputStyle} labelStyle={labelStyle} />
                       <HotelInput label="Check In" type="date" value={hotel.checkIn} hotelId={hotel.id} field="checkIn" setHotels={setHotels} inputStyle={inputStyle} labelStyle={labelStyle} />
@@ -1287,9 +1249,7 @@ ${excludesText}
               <div style={{ display: "grid", gridTemplateColumns: responsiveTwo, gap: 14 }}>
                 <InputText label="Main Transport" value={mainTransport} setValue={setMainTransport} inputStyle={inputStyle} labelStyle={labelStyle} placeholder="Landcruiser" />
                 <InputField label={isDayTrip ? "Transport Total Cost" : "Transport Price Per Day"} value={transportPricePerDay} setValue={setTransportPricePerDay} inputStyle={inputStyle} labelStyle={labelStyle} />
-                {!isDayTrip && (
-                  <InputField label="Number of Days" value={numberOfDays} setValue={setNumberOfDays} inputStyle={inputStyle} labelStyle={labelStyle} />
-                )}
+                {!isDayTrip && <InputField label="Number of Days" value={numberOfDays} setValue={setNumberOfDays} inputStyle={inputStyle} labelStyle={labelStyle} />}
               </div>
             </div>
 
@@ -1306,39 +1266,16 @@ ${excludesText}
             <div style={cardStyle}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
                 <h2 style={{ margin: 0, fontSize: 22 }}>Activities</h2>
-                <button style={primaryButton} onClick={addActivity}>Add Activity</button>
+                <button style={primaryButton} onClick={addActivity}>
+                  Add Activity
+                </button>
               </div>
 
               {activities.map((activity) => (
                 <div key={activity.id} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(145px, 1fr))", gap: 10, marginBottom: 10 }}>
-                  <input
-                    style={inputStyle}
-                    placeholder="Giraffe Centre"
-                    value={activity.name}
-                    onChange={(e) =>
-                      setActivities((prev) => prev.map((item) => item.id === activity.id ? { ...item, name: e.target.value } : item))
-                    }
-                  />
-                  <input
-                    style={inputStyle}
-                    type="number"
-                    min="0"
-                    placeholder="Adult Rate"
-                    value={activity.adultRate}
-                    onChange={(e) =>
-                      setActivities((prev) => prev.map((item) => item.id === activity.id ? { ...item, adultRate: e.target.value } : item))
-                    }
-                  />
-                  <input
-                    style={inputStyle}
-                    type="number"
-                    min="0"
-                    placeholder="Child Rate"
-                    value={activity.childRate}
-                    onChange={(e) =>
-                      setActivities((prev) => prev.map((item) => item.id === activity.id ? { ...item, childRate: e.target.value } : item))
-                    }
-                  />
+                  <input style={inputStyle} placeholder="Giraffe Centre" value={activity.name} onChange={(e) => setActivities((prev) => prev.map((item) => (item.id === activity.id ? { ...item, name: e.target.value } : item)))} />
+                  <input style={inputStyle} type="number" min="0" placeholder="Adult Rate" value={activity.adultRate} onChange={(e) => setActivities((prev) => prev.map((item) => (item.id === activity.id ? { ...item, adultRate: e.target.value } : item)))} />
+                  <input style={inputStyle} type="number" min="0" placeholder="Child Rate" value={activity.childRate} onChange={(e) => setActivities((prev) => prev.map((item) => (item.id === activity.id ? { ...item, childRate: e.target.value } : item)))} />
                   <button style={secondaryButton} onClick={() => setActivities((prev) => setSafeRemove(prev, activity.id, createActivity))}>
                     Remove
                   </button>
@@ -1367,7 +1304,9 @@ ${excludesText}
             <div style={cardStyle}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
                 <h2 style={{ margin: 0, fontSize: 22 }}>Excludes</h2>
-                <button style={primaryButton} onClick={addExclude}>Add Exclude</button>
+                <button style={primaryButton} onClick={addExclude}>
+                  Add Exclude
+                </button>
               </div>
 
               {excludes.map((item, index) => {
@@ -1379,10 +1318,12 @@ ${excludesText}
                       placeholder={defaultPlaceholders[index] || "Excluded item"}
                       value={item.text}
                       onChange={(e) =>
-                        setExcludes((prev) => prev.map((entry) => entry.id === item.id ? { ...entry, text: e.target.value } : entry))
+                        setExcludes((prev) =>
+                          prev.map((entry) => (entry.id === item.id ? { ...entry, text: e.target.value } : entry))
+                        )
                       }
                     />
-                    <button style={secondaryButton} onClick={() => setExcludes((prev) => prev.length === 1 ? prev : prev.filter((entry) => entry.id !== item.id))}>
+                    <button style={secondaryButton} onClick={() => setExcludes((prev) => (prev.length === 1 ? prev : prev.filter((entry) => entry.id !== item.id)))}>
                       Remove
                     </button>
                   </div>
@@ -1397,9 +1338,15 @@ ${excludesText}
                 <h2 style={{ marginTop: 0, marginBottom: 16, fontSize: 22 }}>Client Quotation</h2>
 
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
-                  <button style={primaryButton} onClick={handlePrint}>Print / Save PDF</button>
-                  <button style={secondaryButton} onClick={handleDownloadQuote}>Download Quote</button>
-                  <button style={secondaryButton} onClick={handleCopyQuote}>Copy Quote</button>
+                  <button style={primaryButton} onClick={handlePrint}>
+                    Print / Save PDF
+                  </button>
+                  <button style={secondaryButton} onClick={handleDownloadQuote}>
+                    Download Quote
+                  </button>
+                  <button style={secondaryButton} onClick={handleCopyQuote}>
+                    Copy Quote
+                  </button>
                 </div>
 
                 <div style={{ marginBottom: 12 }}>
@@ -1462,6 +1409,7 @@ ${excludesText}
                           {formatMoney(displayFinalTotal, displayCurrency)}
                         </strong>
                       </div>
+
                       <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 12, alignItems: "center", fontSize: 16 }}>
                         <span><strong>Price Per Person</strong></span>
                         <strong style={{ color: selectedTheme.accent, textAlign: "right", wordBreak: "break-word" }}>
@@ -1559,13 +1507,7 @@ function InputField({
   return (
     <div>
       <label style={labelStyle}>{label}</label>
-      <input
-        style={inputStyle}
-        type="number"
-        min="0"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-      />
+      <input style={inputStyle} type="number" min="0" value={value} onChange={(e) => setValue(e.target.value)} />
     </div>
   );
 }
@@ -1602,10 +1544,68 @@ function HotelInput({
         placeholder={placeholder}
         onChange={(e) =>
           setHotels((prev) =>
-            prev.map((item) => item.id === hotelId ? { ...item, [field]: e.target.value } : item)
+            prev.map((item) => (item.id === hotelId ? { ...item, [field]: e.target.value } : item))
           )
         }
       />
+    </div>
+  );
+}
+
+function DynamicTextList<T extends { id: string; name: string }>({
+  title,
+  addText,
+  items,
+  setItems,
+  createItem,
+  inputStyle,
+  primaryButton,
+  secondaryButton,
+  placeholder,
+  emptyText,
+}: {
+  title: string;
+  addText: string;
+  items: T[];
+  setItems: React.Dispatch<React.SetStateAction<T[]>>;
+  createItem: () => T;
+  inputStyle: React.CSSProperties;
+  primaryButton: React.CSSProperties;
+  secondaryButton: React.CSSProperties;
+  placeholder: string;
+  emptyText?: string;
+}) {
+  return (
+    <div style={{ marginTop: 18 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
+        <strong>{title}</strong>
+        <button style={primaryButton} onClick={() => setItems((prev) => [...prev, createItem()])}>
+          {addText}
+        </button>
+      </div>
+
+      {items.length === 0 && emptyText && <div style={{ color: "#64748b", fontSize: 14 }}>{emptyText}</div>}
+
+      {items.map((item) => (
+        <div key={item.id} style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 10, marginBottom: 10 }}>
+          <input
+            style={inputStyle}
+            placeholder={placeholder}
+            value={item.name}
+            onChange={(e) =>
+              setItems((prev) =>
+                prev.map((entry) => (entry.id === item.id ? { ...entry, name: e.target.value } : entry))
+              )
+            }
+          />
+          <button
+            style={secondaryButton}
+            onClick={() => setItems((prev) => (prev.length === 1 ? prev : prev.filter((entry) => entry.id !== item.id)))}
+          >
+            Remove
+          </button>
+        </div>
+      ))}
     </div>
   );
 }
