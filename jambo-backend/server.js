@@ -1,37 +1,92 @@
-const express = require("express");
-const cors = require("cors");
-const dotenv = require("dotenv");
-const nodemailer = require("nodemailer");
-const PDFDocument = require("pdfkit");
+import express from "express";
+import cors from "cors";
+import dotenv from "dotenv";
+import nodemailer from "nodemailer";
+import fs from "fs";
+import path from "path";
+import crypto from "crypto";
+import { fileURLToPath } from "url";
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-const TRIAL_HOURS = 2;
 
-app.use(cors());
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const DATA_FILE = path.join(__dirname, "activation-data.json");
+const TRIAL_HOURS = 2;
+const SUBSCRIPTION_AMOUNT = "KES 5,000 per month";
+
+app.use(
+  cors({
+    origin: [
+      "http://localhost:5173",
+      "https://jambotripcosting.vercel.app",
+    ],
+    methods: ["GET", "POST"],
+    credentials: true,
+  })
+);
+
 app.use(express.json({ limit: "25mb" }));
 
-const trials = {};
+function readData() {
+  if (!fs.existsSync(DATA_FILE)) {
+    const starter = { trials: {}, activationCodes: {}, licenses: {} };
+    fs.writeFileSync(DATA_FILE, JSON.stringify(starter, null, 2));
+    return starter;
+  }
+
+  try {
+    return JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
+  } catch {
+    return { trials: {}, activationCodes: {}, licenses: {} };
+  }
+}
+
+function writeData(data) {
+  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+}
+
+function normalizeEmail(email) {
+  return String(email || "").trim().toLowerCase();
+}
+
+function normalizePhone(phone) {
+  return String(phone || "").replace(/\s+/g, "").trim();
+}
+
+function userKey(email, phone) {
+  return `${normalizeEmail(email)}__${normalizePhone(phone)}`;
+}
+
+function generateActivationCode(name = "AGENT") {
+  const cleanName = String(name || "AGENT")
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .toUpperCase()
+    .slice(0, 10);
+
+  const randomPart = crypto.randomBytes(4).toString("hex").toUpperCase();
+
+  return `JAMBO-${cleanName}-${randomPart}`;
+}
 
 function toNumber(value) {
-  const n = Number(value ?? 0);
+  const n = Number(value || 0);
   return Number.isFinite(n) ? n : 0;
 }
 
-function safeText(value, fallback = "-") {
-  const text = String(value ?? "").trim();
-  return text || fallback;
-}
+function calculateNights(checkIn, checkOut) {
+  if (!checkIn || !checkOut) return 0;
 
-function safeArray(value) {
-  return Array.isArray(value) ? value : [];
-}
+  const start = new Date(checkIn).getTime();
+  const end = new Date(checkOut).getTime();
 
-function safeJoin(values) {
-  const clean = safeArray(values).map((v) => String(v).trim()).filter(Boolean);
-  return clean.length ? clean.join(", ") : "-";
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 0;
+
+  return Math.round((end - start) / (1000 * 60 * 60 * 24));
 }
 
 function formatMoney(value, currency = "KES") {
@@ -42,146 +97,59 @@ function formatMoney(value, currency = "KES") {
   }).format(Number.isFinite(value) ? value : 0);
 }
 
-function getNights(checkIn, checkOut) {
-  if (!checkIn || !checkOut) return 0;
-  const start = new Date(checkIn).getTime();
-  const end = new Date(checkOut).getTime();
-  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 0;
-  return Math.round((end - start) / (1000 * 60 * 60 * 24));
-}
-
-function hexToRgb(hex) {
-  const clean = String(hex || "").replace("#", "");
-  if (clean.length !== 6) return { r: 15, g: 76, b: 129 };
-  return {
-    r: parseInt(clean.slice(0, 2), 16),
-    g: parseInt(clean.slice(2, 4), 16),
-    b: parseInt(clean.slice(4, 6), 16),
-  };
-}
-
-app.post("/trial/start", (req, res) => {
-  const email = String(req.body.email || "").toLowerCase().trim();
-
-  if (!email) {
-    return res.status(400).json({
-      allowed: false,
-      message: "Email is required",
-    });
-  }
-
-  const now = Date.now();
-  const trialMs = TRIAL_HOURS * 60 * 60 * 1000;
-
-  if (!trials[email]) {
-    trials[email] = {
-      startedAt: now,
-      unlocked: false,
-    };
-  }
-
-  const trial = trials[email];
-  const remainingMs = trialMs - (now - trial.startedAt);
-
-  if (trial.unlocked || remainingMs > 0) {
-    return res.json({
-      allowed: true,
-      email,
-      unlocked: trial.unlocked,
-      remainingMs: Math.max(0, remainingMs),
-    });
-  }
-
-  return res.json({
-    allowed: false,
-    email,
-    unlocked: false,
-    remainingMs: 0,
-    message: "Trial ended. Please unlock full version.",
-  });
-});
-
-app.get("/trial/status", (req, res) => {
-  const email = String(req.query.email || "").toLowerCase().trim();
-
-  if (!email || !trials[email]) {
-    return res.json({
-      allowed: false,
-      email,
-      unlocked: false,
-      remainingMs: 0,
-      message: "No trial found.",
-    });
-  }
-
-  const now = Date.now();
-  const trialMs = TRIAL_HOURS * 60 * 60 * 1000;
-  const trial = trials[email];
-  const remainingMs = trialMs - (now - trial.startedAt);
-
-  res.json({
-    allowed: trial.unlocked || remainingMs > 0,
-    email,
-    unlocked: trial.unlocked,
-    remainingMs: Math.max(0, remainingMs),
-    message: remainingMs > 0 ? "" : "Trial ended. Please unlock full version.",
-  });
-});
-
-function buildCalculation(body) {
-  const adults = Math.max(0, toNumber(body.adults));
-  const children = Math.max(0, toNumber(body.children));
+function calculatePackage(body) {
+  const adults = toNumber(body.adults);
+  const children = toNumber(body.children);
   const totalTravellers = adults + children;
 
-  const currencyMode = body.clientType === "USD" ? "USD" : "KES";
-  const isDayTrip = body.baseTripType === "Day Trip" || body.tripType === "Day Trip";
+  const isDayTrip = Boolean(body.isDayTrip);
+  const clientType = body.clientType === "USD" ? "USD" : "KES";
 
-  const hotels = isDayTrip ? [] : safeArray(body.hotels);
-  const activities = safeArray(body.activities);
+  const hotels = Array.isArray(body.hotels) ? body.hotels : [];
+  const activities = Array.isArray(body.activities) ? body.activities : [];
 
-  const nightsFromHotels = hotels.reduce(
-    (sum, hotel) => sum + getNights(hotel.checkIn, hotel.checkOut),
-    0
-  );
+  const numberOfDays = toNumber(body.numberOfDays);
 
   const totalNights = isDayTrip
     ? 0
-    : nightsFromHotels > 0
-    ? nightsFromHotels
-    : Math.max(0, toNumber(body.numberOfDays) - 1);
+    : hotels.reduce((sum, hotel) => {
+        return sum + calculateNights(hotel.checkIn, hotel.checkOut);
+      }, 0) || Math.max(0, numberOfDays - 1);
 
   const hotelTotal = isDayTrip
     ? 0
     : hotels.reduce((sum, hotel) => {
-        const nights = getNights(hotel.checkIn, hotel.checkOut) || totalNights;
-        const roomTotal = toNumber(hotel.doubleRoomRate) * nights;
-        const childTotal = toNumber(hotel.childRate) * children * nights;
-        return sum + roomTotal + childTotal;
+        const nights = calculateNights(hotel.checkIn, hotel.checkOut) || totalNights;
+        return (
+          sum +
+          toNumber(hotel.doubleRoomRate) * nights +
+          toNumber(hotel.childRate) * children * nights
+        );
       }, 0);
 
-  const transportRate = toNumber(body.transportPricePerDay);
-  const transportDays = isDayTrip ? 1 : toNumber(body.numberOfDays);
-  const mainTransportTotal = isDayTrip ? transportRate : transportRate * transportDays;
+  const mainTransportTotal = isDayTrip
+    ? toNumber(body.transportPricePerDay)
+    : toNumber(body.transportPricePerDay) * numberOfDays;
 
   const adultParkRate =
-    currencyMode === "USD"
+    clientType === "USD"
       ? toNumber(body.nonResidentAdultFee)
       : toNumber(body.residentAdultFee);
 
   const childParkRate =
-    currencyMode === "USD"
+    clientType === "USD"
       ? toNumber(body.nonResidentChildFee)
       : toNumber(body.residentChildFee);
 
-  const parkBase = adultParkRate * adults + childParkRate * children;
+  const parkFeesTotal = isDayTrip
+    ? adultParkRate * adults + childParkRate * children
+    : (adultParkRate * adults + childParkRate * children) * totalNights;
 
-  const parkFeesTotal = isDayTrip ? parkBase : parkBase * totalNights;
-
-  const activitiesTotal = activities.reduce((sum, activity) => {
+  const activitiesTotal = activities.reduce((sum, item) => {
     return (
       sum +
-      toNumber(activity.adultRate) * adults +
-      toNumber(activity.childRate) * children
+      toNumber(item.adultRate) * adults +
+      toNumber(item.childRate) * children
     );
   }, 0);
 
@@ -200,8 +168,6 @@ function buildCalculation(body) {
     toNumber(body.boatAdultRate) * adults +
     toNumber(body.boatChildRate) * children;
 
-  const extrasTotal = activitiesTotal + mealsTotal + otherTransportTotal;
-
   const subtotal =
     hotelTotal +
     mainTransportTotal +
@@ -214,273 +180,334 @@ function buildCalculation(body) {
   const finalTotal = subtotal + markupAmount;
   const pricePerPerson = totalTravellers > 0 ? finalTotal / totalTravellers : 0;
 
-  const hotelNames = hotels.map((h) => safeText(h.name, "")).filter(Boolean);
+  const activityNames = activities
+    .map((item) => String(item.name || "").trim())
+    .filter(Boolean);
 
   const includes = [
-    hotelNames.length ? "Accommodation" : "",
-    safeText(body.mainTransport, "") && body.mainTransport !== "None"
-      ? `Transport (${safeText(body.mainTransport)})`
+    !isDayTrip && hotelTotal > 0 ? "Accommodation" : "",
+    body.mainTransport && body.mainTransport !== "None"
+      ? `Transport by ${body.mainTransport}`
       : "",
     parkFeesTotal > 0 ? "Park Fees" : "",
-    activitiesTotal > 0 ? "Activities" : "",
+    activityNames.length ? `Activities: ${activityNames.join(", ")}` : "",
     mealsTotal > 0 ? "Meals" : "",
-    "Professional Driver Guide",
+    "Professional driver guide",
   ].filter(Boolean);
-
-  const transportCalculationText = isDayTrip
-    ? `Day Trip Transport: ${formatMoney(mainTransportTotal, currencyMode)} fixed total`
-    : `Transport: ${formatMoney(transportRate, currencyMode)} × ${transportDays} day(s) = ${formatMoney(
-        mainTransportTotal,
-        currencyMode
-      )}`;
 
   return {
     success: true,
-    currencyMode,
+    currencyMode: clientType,
     totalTravellers,
     totalNights,
-
     hotelTotal,
     hotelPerPerson: totalTravellers > 0 ? hotelTotal / totalTravellers : 0,
-
     mainTransportTotal,
-    transportPerPerson: totalTravellers > 0 ? mainTransportTotal / totalTravellers : 0,
-
+    transportPerPerson:
+      totalTravellers > 0 ? mainTransportTotal / totalTravellers : 0,
     parkFeesTotal,
-    parkFeePerPerson: totalTravellers > 0 ? parkFeesTotal / totalTravellers : 0,
-
+    parkFeePerPerson:
+      totalTravellers > 0 ? parkFeesTotal / totalTravellers : 0,
     activitiesTotal,
     mealsTotal,
     otherTransportTotal,
-    extrasTotal,
-
+    extrasTotal: mealsTotal + otherTransportTotal,
     markupAmount,
     finalTotal,
     pricePerPerson,
-
     displayFinalTotal: finalTotal,
     displayPricePerPerson: pricePerPerson,
-
     includes,
-    transportCalculationText,
+    transportCalculationText: "",
   };
 }
 
-function buildPdfBuffer(data) {
-  return new Promise((resolve, reject) => {
-    try {
-      const calculation =
-        data.calculation && typeof data.calculation === "object"
-          ? data.calculation
-          : buildCalculation(data);
+function buildQuotationText(body, calculation) {
+  const currency = calculation.currencyMode || body.clientType || "KES";
 
-      const currencyMode =
-        calculation.currencyMode || (data.clientType === "USD" ? "USD" : "KES");
+  const includesText = (calculation.includes || [])
+    .map((item) => `• ${item}`)
+    .join("\n");
 
-      const displayFinalTotal =
-        calculation.displayFinalTotal ?? calculation.finalTotal;
+  const excludes = Array.isArray(body.excludes) ? body.excludes : [];
+  const excludesText = excludes.length
+    ? excludes.map((item) => `• ${item}`).join("\n")
+    : "• Anything not mentioned above";
 
-      const displayPricePerPerson =
-        calculation.displayPricePerPerson ?? calculation.pricePerPerson;
+  return `
+${body.companyName || "Jambo Trip 360"}
+Travel Package Quotation
 
-      const doc = new PDFDocument({
-        size: "A4",
-        margin: 36,
-      });
+Prepared by: ${body.preparedBy || "-"}
+Phone: ${body.companyPhone || "-"}
+Email: ${body.companyEmail || "-"}
+Website: ${body.companyWebsite || "-"}
 
-      const chunks = [];
-      doc.on("data", (chunk) => chunks.push(chunk));
-      doc.on("end", () => resolve(Buffer.concat(chunks)));
-      doc.on("error", reject);
+Lead Client: ${body.leadClientName || "-"}
+Travellers: ${calculation.totalTravellers}
+Adults: ${body.adults || "0"}
+Children: ${body.children || "0"}
+Trip Type: ${body.tripType || "-"}
+Client Type: ${currency === "USD" ? "Non-Resident" : "Resident"}
+Destination(s): ${(body.destinations || []).join(", ") || "-"}
+Hotel(s): ${(body.hotels || []).map((h) => h.name).filter(Boolean).join(", ") || "-"}
 
-      const primary = safeText(data.themePrimary, "#0F4C81");
-      const secondary = safeText(data.themeSecondary, "#EAF4FF");
-      const rgb = hexToRgb(primary);
+Total Package Price: ${formatMoney(calculation.displayFinalTotal, currency)}
+Price Per Person: ${formatMoney(calculation.displayPricePerPerson, currency)}
 
-      const pageWidth = doc.page.width;
-      const usableWidth = pageWidth - 72;
+Includes
+${includesText || "• Transport"}
 
-      doc.roundedRect(36, 28, usableWidth, 90, 16).fill(primary);
-
-      doc.roundedRect(48, 42, 74, 62, 10).fill("#ffffff");
-
-      if (data.companyLogo && typeof data.companyLogo === "string") {
-        try {
-          const base64Data = data.companyLogo.replace(/^data:image\/\w+;base64,/, "");
-          const logoBuffer = Buffer.from(base64Data, "base64");
-          doc.image(logoBuffer, 53, 47, {
-            fit: [64, 52],
-            align: "center",
-            valign: "center",
-          });
-        } catch {
-          doc.font("Helvetica-Bold").fontSize(10).fillColor(primary).text("Logo", 72, 66);
-        }
-      } else {
-        doc.font("Helvetica-Bold").fontSize(10).fillColor(primary).text("Logo", 72, 66);
-      }
-
-      doc
-        .font("Helvetica-Bold")
-        .fontSize(22)
-        .fillColor("#ffffff")
-        .text(safeText(data.companyName, "Jambo Trip 360"), 138, 44);
-
-      doc
-        .font("Helvetica")
-        .fontSize(10)
-        .fillColor("#ffffff")
-        .text(
-          `${safeText(data.companyPhone)} | ${safeText(data.companyEmail)} | ${safeText(
-            data.companyWebsite
-          )}`,
-          138,
-          72,
-          { width: 370 }
-        );
-
-      doc
-        .font("Helvetica")
-        .fontSize(10)
-        .fillColor("#ffffff")
-        .text(`Prepared by: ${safeText(data.preparedBy)}`, 138, 88);
-
-      let y = 145;
-
-      doc
-        .font("Helvetica-Bold")
-        .fontSize(19)
-        .fillColor(primary)
-        .text("Client Travel Quotation", 36, y);
-
-      y += 32;
-
-      const hotelText = safeJoin(
-        safeArray(data.hotels)
-          .map((hotel) => safeText(hotel.name, ""))
-          .filter(Boolean)
-      );
-
-      const details = [
-        ["Lead Client", safeText(data.leadClientName)],
-        ["Destination", safeJoin(data.destinations)],
-        ["Trip Type", safeText(data.tripType)],
-        ["Client Type", currencyMode === "USD" ? "Non-Resident" : "Resident"],
-        ["Currency", currencyMode],
-        ["Adults", String(toNumber(data.adults))],
-        ["Children", String(toNumber(data.children))],
-        ["Total Travellers", String(calculation.totalTravellers)],
-        ["Additional Clients", safeJoin(data.otherClients)],
-      ];
-
-      if (safeText(data.tripType, "") !== "Day Trip") {
-        details.push(["Hotel(s)", hotelText]);
-        details.push(["Total Nights", String(calculation.totalNights)]);
-      }
-
-      details.forEach(([label, value]) => {
-        doc.font("Helvetica-Bold").fontSize(10).fillColor("#334155").text(label, 36, y, {
-          width: 155,
-        });
-
-        doc.font("Helvetica").fontSize(10).fillColor("#334155").text(value, 210, y, {
-          width: 330,
-        });
-
-        y += 20;
-      });
-
-      y += 16;
-
-      doc.roundedRect(36, y, usableWidth, 100, 14).fill(secondary);
-
-      doc.font("Helvetica-Bold").fontSize(16).fillColor(primary).text("Package Summary", 52, y + 16);
-
-      doc.font("Helvetica-Bold").fontSize(12).fillColor("#334155").text("Total Package Price", 52, y + 50);
-
-      doc
-        .font("Helvetica-Bold")
-        .fontSize(15)
-        .fillColor(primary)
-        .text(formatMoney(displayFinalTotal, currencyMode), 320, y + 48, {
-          width: 160,
-          align: "right",
-        });
-
-      doc.font("Helvetica-Bold").fontSize(12).fillColor("#334155").text("Price Per Person", 52, y + 74);
-
-      doc
-        .font("Helvetica-Bold")
-        .fontSize(15)
-        .fillColor(primary)
-        .text(formatMoney(displayPricePerPerson, currencyMode), 320, y + 72, {
-          width: 160,
-          align: "right",
-        });
-
-      y += 130;
-
-      doc.font("Helvetica-Bold").fontSize(15).fillColor(primary).text("Includes", 36, y);
-      y += 24;
-
-      const includes = safeArray(calculation.includes).filter(Boolean);
-      (includes.length ? includes : ["Transport"]).forEach((item) => {
-        doc.font("Helvetica").fontSize(11).fillColor("#334155").text(`• ${item}`, 46, y);
-        y += 18;
-      });
-
-      y += 14;
-
-      doc.font("Helvetica-Bold").fontSize(15).fillColor(primary).text("Excludes", 36, y);
-      y += 24;
-
-      const excludes = safeArray(data.excludes).filter(Boolean);
-      (excludes.length ? excludes : ["Anything not mentioned above"]).forEach((item) => {
-        doc.font("Helvetica").fontSize(11).fillColor("#334155").text(`• ${item}`, 46, y);
-        y += 18;
-      });
-
-      y += 28;
-
-      doc
-        .font("Helvetica")
-        .fontSize(10)
-        .fillColor(`rgb(${Math.max(0, rgb.r - 20)},${Math.max(0, rgb.g - 20)},${Math.max(0, rgb.b - 20)})`)
-        .text(`Thank you for choosing ${safeText(data.companyName, "our company")}.`, 36, y, {
-          width: usableWidth,
-          align: "center",
-        });
-
-      doc.end();
-    } catch (error) {
-      reject(error);
-    }
-  });
+Excludes
+${excludesText}
+  `.trim();
 }
 
-function createTransporter() {
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-    throw new Error("Missing EMAIL_USER or EMAIL_PASS in .env");
+const transporter =
+  process.env.EMAIL_USER && process.env.EMAIL_PASS
+    ? nodemailer.createTransport({
+        service: "gmail",
+        auth: {
+          user: process.env.EMAIL_USER,
+          pass: process.env.EMAIL_PASS,
+        },
+      })
+    : null;
+
+app.get("/", (req, res) => {
+  res.send("Jambo Trip 360 backend is running securely");
+});
+
+app.post("/trial/start", (req, res) => {
+  const email = normalizeEmail(req.body.email);
+  const phone = normalizePhone(req.body.phone);
+
+  if (!email || !email.includes("@") || !phone) {
+    return res.status(400).json({
+      allowed: false,
+      message: "Valid email and phone are required.",
+    });
   }
 
-  return nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
-    },
+  const data = readData();
+  const key = userKey(email, phone);
+
+  if (data.licenses[key]?.active) {
+    return res.json({
+      allowed: true,
+      unlocked: true,
+      email,
+      phone,
+      remainingMs: 0,
+      message: "Subscription active.",
+    });
+  }
+
+  if (!data.trials[key]) {
+    data.trials[key] = {
+      email,
+      phone,
+      startedAt: Date.now(),
+    };
+    writeData(data);
+  }
+
+  const trial = data.trials[key];
+  const expiresAt = trial.startedAt + TRIAL_HOURS * 60 * 60 * 1000;
+  const remainingMs = Math.max(0, expiresAt - Date.now());
+
+  if (remainingMs <= 0) {
+    return res.json({
+      allowed: false,
+      unlocked: false,
+      email,
+      phone,
+      remainingMs: 0,
+      message: "Trial ended. Please activate subscription.",
+    });
+  }
+
+  res.json({
+    allowed: true,
+    unlocked: false,
+    email,
+    phone,
+    remainingMs,
+    message: "Trial active.",
   });
-}
+});
+
+app.get("/trial/status", (req, res) => {
+  const email = normalizeEmail(req.query.email);
+  const phone = normalizePhone(req.query.phone);
+
+  if (!email || !phone) {
+    return res.status(400).json({
+      allowed: false,
+      message: "Email and phone are required.",
+    });
+  }
+
+  const data = readData();
+  const key = userKey(email, phone);
+
+  if (data.licenses[key]?.active) {
+    return res.json({
+      allowed: true,
+      unlocked: true,
+      email,
+      phone,
+      remainingMs: 0,
+      message: "Subscription active.",
+    });
+  }
+
+  const trial = data.trials[key];
+
+  if (!trial) {
+    return res.json({
+      allowed: false,
+      unlocked: false,
+      email,
+      phone,
+      remainingMs: 0,
+      message: "No trial found.",
+    });
+  }
+
+  const expiresAt = trial.startedAt + TRIAL_HOURS * 60 * 60 * 1000;
+  const remainingMs = Math.max(0, expiresAt - Date.now());
+
+  res.json({
+    allowed: remainingMs > 0,
+    unlocked: false,
+    email,
+    phone,
+    remainingMs,
+    message:
+      remainingMs > 0
+        ? "Trial active."
+        : "Trial ended. Please activate subscription.",
+  });
+});
+
+app.post("/activate", (req, res) => {
+  const email = normalizeEmail(req.body.email);
+  const phone = normalizePhone(req.body.phone);
+  const code = String(req.body.code || "").trim().toUpperCase();
+
+  if (!email || !phone || !code) {
+    return res.status(400).json({
+      success: false,
+      message: "Email, phone, and activation code are required.",
+    });
+  }
+
+  const data = readData();
+  const key = userKey(email, phone);
+  const activation = data.activationCodes[code];
+
+  if (!activation) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid activation code.",
+    });
+  }
+
+  if (activation.used) {
+    return res.status(400).json({
+      success: false,
+      message: "This activation code has already been used.",
+    });
+  }
+
+  if (
+    normalizeEmail(activation.email) !== email ||
+    normalizePhone(activation.phone) !== phone
+  ) {
+    return res.status(403).json({
+      success: false,
+      message: "This code does not belong to this email and phone number.",
+    });
+  }
+
+  activation.used = true;
+  activation.usedAt = Date.now();
+
+  data.licenses[key] = {
+    email,
+    phone,
+    active: true,
+    activatedAt: Date.now(),
+    code,
+    subscription: SUBSCRIPTION_AMOUNT,
+  };
+
+  writeData(data);
+
+  res.json({
+    success: true,
+    unlocked: true,
+    message: "Activation successful.",
+  });
+});
+
+app.post("/admin/generate-code", (req, res) => {
+  const adminSecret = String(req.headers["x-admin-secret"] || "");
+  const expectedSecret = String(process.env.ADMIN_SECRET || "");
+
+  if (!expectedSecret || adminSecret !== expectedSecret) {
+    return res.status(401).json({
+      success: false,
+      message: "Unauthorized.",
+    });
+  }
+
+  const email = normalizeEmail(req.body.email);
+  const phone = normalizePhone(req.body.phone);
+  const name = String(req.body.name || "Agent").trim();
+
+  if (!email || !email.includes("@") || !phone) {
+    return res.status(400).json({
+      success: false,
+      message: "Valid email and phone are required.",
+    });
+  }
+
+  const data = readData();
+  let code = generateActivationCode(name);
+
+  while (data.activationCodes[code]) {
+    code = generateActivationCode(name);
+  }
+
+  data.activationCodes[code] = {
+    email,
+    phone,
+    name,
+    used: false,
+    createdAt: Date.now(),
+  };
+
+  writeData(data);
+
+  res.json({
+    success: true,
+    code,
+    email,
+    phone,
+    message: "Activation code generated successfully.",
+  });
+});
 
 app.post("/calculate", (req, res) => {
   try {
-    const calculation = buildCalculation(req.body);
-    res.json(calculation);
+    const result = calculatePackage(req.body);
+    res.json(result);
   } catch (error) {
-    console.error("CALCULATION ERROR:", error);
     res.status(500).json({
       success: false,
-      message: "Error calculating quotation",
+      message: "Calculation failed.",
       error: error.message,
     });
   }
@@ -488,67 +515,40 @@ app.post("/calculate", (req, res) => {
 
 app.post("/send-quotation", async (req, res) => {
   try {
-    const data = req.body;
-    const clientEmail = safeText(data.clientEmail, "");
-
-    if (!clientEmail || !clientEmail.includes("@")) {
-      return res.status(400).json({
+    if (!transporter) {
+      return res.status(500).json({
         success: false,
-        message: "Valid client email is required",
+        message: "Email is not configured. Add EMAIL_USER and EMAIL_PASS.",
       });
     }
 
-    const calculation =
-      data.calculation && typeof data.calculation === "object"
-        ? data.calculation
-        : buildCalculation(data);
+    const calculation = req.body.calculation || calculatePackage(req.body);
+    const quoteText = req.body.quoteText || buildQuotationText(req.body, calculation);
 
-    const pdfBuffer = await buildPdfBuffer({
-      ...data,
-      calculation,
-    });
+    const clientEmail = normalizeEmail(req.body.clientEmail);
 
-    const transporter = createTransporter();
-
-    const currencyMode =
-      calculation.currencyMode || (data.clientType === "USD" ? "USD" : "KES");
-
-    const displayFinalTotal =
-      calculation.displayFinalTotal ?? calculation.finalTotal;
-
-    const displayPricePerPerson =
-      calculation.displayPricePerPerson ?? calculation.pricePerPerson;
+    if (!clientEmail) {
+      return res.status(400).json({
+        success: false,
+        message: "Client email is required.",
+      });
+    }
 
     await transporter.sendMail({
-      from: process.env.EMAIL_USER,
+      from: `"${req.body.companyName || "Jambo Trip 360"}" <${process.env.EMAIL_USER}>`,
       to: clientEmail,
-      subject: `${safeText(data.companyName, "Jambo Trip 360")} Travel Package Quotation`,
-      text: `Hello ${safeText(data.leadClientName, "")},
-
-Please find attached your travel package quotation.
-
-Total Package Price: ${formatMoney(displayFinalTotal, currencyMode)}
-Price Per Person: ${formatMoney(displayPricePerPerson, currencyMode)}
-
-Thank you.`,
-      attachments: [
-        {
-          filename: "quotation.pdf",
-          content: pdfBuffer,
-          contentType: "application/pdf",
-        },
-      ],
+      subject: `Travel Quotation - ${req.body.leadClientName || "Client"}`,
+      text: quoteText,
     });
 
     res.json({
       success: true,
-      message: "Quotation sent successfully",
+      message: "Quotation sent successfully.",
     });
   } catch (error) {
-    console.error("SEND QUOTATION ERROR:", error);
     res.status(500).json({
       success: false,
-      message: "Error sending quotation",
+      message: "Failed to send quotation.",
       error: error.message,
     });
   }
@@ -556,20 +556,26 @@ Thank you.`,
 
 app.get("/test-email", async (req, res) => {
   try {
-    const transporter = createTransporter();
+    if (!transporter) {
+      return res.status(500).json({
+        success: false,
+        message: "Email setup failed. EMAIL_USER or EMAIL_PASS missing.",
+      });
+    }
+
     await transporter.verify();
-    res.json({ success: true, message: "Email is ready" });
+
+    res.json({
+      success: true,
+      message: "Email is ready.",
+    });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: "Email setup failed",
+      message: "Email setup failed.",
       error: error.message,
     });
   }
-});
-
-app.get("/", (req, res) => {
-  res.send("Jambo Trip 360 backend is running");
 });
 
 app.listen(PORT, () => {
