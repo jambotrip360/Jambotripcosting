@@ -921,7 +921,29 @@ ${excludesText}
                   style={inputStyle}
                   value={agentEmail}
                   placeholder="agent@email.com"
-                  onChange={(e) => setAgentEmail(e.target.value)}
+                onChange={(e) => {
+  let value = e.target.value.replace(/\s/g, "");
+
+  // Always force +254 prefix
+  if (!value.startsWith("+254")) {
+    if (value.startsWith("07")) {
+      value = "+254" + value.substring(1);
+    } else if (value.startsWith("7")) {
+      value = "+254" + value;
+    } else if (value.startsWith("254")) {
+      value = "+" + value;
+    } else {
+      value = "+254";
+    }
+  }
+
+  setAgentPhone(value);
+}}
+onKeyDown={(e) => {
+  if (agentPhone.length <= 4 && e.key === "Backspace") {
+    e.preventDefault();
+  }
+}}
                 />
               </div>
 
@@ -930,7 +952,7 @@ ${excludesText}
                 <input
                   style={inputStyle}
                   value={agentPhone}
-                  placeholder="2547XXXXXXXX"
+                  placeholder="+2547XXXXXXXX"
                   onChange={(e) => setAgentPhone(e.target.value)}
                 />
               </div>
