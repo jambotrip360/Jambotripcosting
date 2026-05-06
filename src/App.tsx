@@ -916,56 +916,44 @@ ${excludesText}
               </div>
 
               <div>
-                <label style={labelStyle}>Agent Email</label>
-                <input
-                  style={inputStyle}
-                  value={agentEmail}
-                  placeholder="agent@email.com"
-                onChange={(e) => {
-  let value = e.target.value.replace(/\s/g, "");
+  <label style={labelStyle}>Agent Email</label>
 
-  // Always force +254 prefix
-  if (!value.startsWith("+254")) {
-    if (value.startsWith("07")) {
-      value = "+254" + value.substring(1);
-    } else if (value.startsWith("7")) {
-      value = "+254" + value;
-    } else if (value.startsWith("254")) {
-      value = "+" + value;
-    } else {
-      value = "+254";
-    }
-  }
+  <input
+    style={inputStyle}
+    value={agentEmail}
+    placeholder="agent@email.com"
+    onChange={(e) => setAgentEmail(e.target.value)}
+  />
+</div>
 
-  setAgentPhone(value);
-}}
-onKeyDown={(e) => {
-  if (agentPhone.length <= 4 && e.key === "Backspace") {
-    e.preventDefault();
-  }
-}}
-                />
-              </div>
+<div>
+  <label style={labelStyle}>Agent Phone / M-Pesa Number</label>
 
-              <div>
-                <label style={labelStyle}>Agent Phone / M-Pesa Number</label>
-                <input
-                  style={inputStyle}
-                  value={agentPhone}
-                  placeholder="+2547XXXXXXXX"
-                  onChange={(e) => setAgentPhone(e.target.value)}
-                />
-              </div>
+  <input
+    style={inputStyle}
+    value={agentPhone}
+    placeholder="+2547XXXXXXXX"
+    onChange={(e) => setAgentPhone(e.target.value)}
+  />
+</div>
 
-              {trialError && <p style={{ color: "#dc2626", margin: 0 }}>{trialError}</p>}
+{trialError && (
+  <p style={{ color: "#dc2626", margin: 0 }}>
+    {trialError}
+  </p>
+)}
 
-              <button
-                style={{ ...primaryButton, width: "100%", marginTop: 8, opacity: trialLoading ? 0.7 : 1 }}
-                onClick={startTrial}
-                disabled={trialLoading}
-              >
-                {trialLoading ? "Checking..." : "Start 2-Hour Trial"}
-              </button>
+<button
+  style={{
+    ...primaryButton,
+    width: "100%",
+    marginTop: 8,
+  }}
+  onClick={startTrial}
+  disabled={trialLoading}
+>
+  {trialLoading ? "Checking..." : "Start 2-Hour Trial"}
+</button>
             </div>
           </div>
         </div>
