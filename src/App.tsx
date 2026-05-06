@@ -663,10 +663,15 @@ export default function App() {
   };
 
   const startTrial = async () => {
-    if (!agentName.trim() || !agentEmail.trim() || !agentEmail.includes("@") || !agentPhone.trim()) {
-      setTrialError("Please enter agent name, valid email, and phone number.");
-      return;
-    }
+    if (
+  !agentName.trim() ||
+  !agentEmail.trim() ||
+  !agentEmail.includes("@") ||
+  !/^\+2547\d{8}$/.test(agentPhone.trim())
+) {
+  setTrialError("Valid name, email, and +2547 phone number are required.");
+  return;
+}
 
     try {
       setTrialLoading(true);
