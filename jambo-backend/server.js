@@ -1,7 +1,6 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import nodemailer from "nodemailer";
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
@@ -265,18 +264,6 @@ ${excludesText}
 
 const transporter =
   process.env.EMAIL_USER && process.env.EMAIL_PASS
-    ? nodemailer.createTransport({
-        service: "gmail",
-        auth: {
-          user: process.env.EMAIL_USER,
-          pass: process.env.EMAIL_PASS,
-        },
-      })
-    : null;
-
-app.get("/", (req, res) => {
-  res.send("Jambo Trip 360 backend is running securely");
-});
 
 app.post("/trial/start", (req, res) => {
   const email = normalizeEmail(req.body.email);
