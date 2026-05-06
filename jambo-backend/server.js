@@ -5,6 +5,7 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { fileURLToPath } from "url";
+import { Resend } from "resend";
 
 dotenv.config();
 
@@ -17,6 +18,8 @@ const __dirname = path.dirname(__filename);
 const DATA_FILE = path.join(__dirname, "activation-data.json");
 const TRIAL_HOURS = 2;
 const SUBSCRIPTION_AMOUNT = "KES 5,000 per month";
+
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 app.use(
   cors({
@@ -33,7 +36,12 @@ app.use(express.json({ limit: "25mb" }));
 
 function readData() {
   if (!fs.existsSync(DATA_FILE)) {
-    const starter = { trials: {}, activationCodes: {}, licenses: {} };
+    const starter = {
+      trials: {},
+      activationCodes: {},
+      licenses: {},
+      usedCodes: {},
+    };
     fs.writeFileSync(DATA_FILE, JSON.stringify(starter, null, 2));
     return starter;
   }
@@ -41,11 +49,16 @@ function readData() {
   try {
     return JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
   } catch {
-    return { trials: {}, activationCodes: {}, licenses: {} };
+    return {
+      trials: {},
+      activationCodes: {},
+      licenses: {},
+      usedCodes: {},
+    };
   }
 }
 
-function writeData(data) {
+function saveData(data) {
   fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
 }
 
@@ -54,447 +67,429 @@ function normalizeEmail(email) {
 }
 
 function normalizePhone(phone) {
-  return String(phone || "").replace(/\s+/g, "").trim();
+  let value = String(phone || "").trim().replace(/\s/g, "");
+
+  if (value.startsWith("07")) {
+    value = "+254" + value.substring(1);
+  } else if (value.startsWith("254")) {
+    value = "+" + value;
+  }
+
+  return value;
 }
 
 function userKey(email, phone) {
   return `${normalizeEmail(email)}__${normalizePhone(phone)}`;
 }
 
-function generateActivationCode(name = "AGENT") {
+function generateCode(name) {
   const cleanName = String(name || "AGENT")
-    .replace(/[^a-zA-Z0-9]/g, "")
     .toUpperCase()
-    .slice(0, 10);
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, 12);
 
-  const randomPart = crypto.randomBytes(4).toString("hex").toUpperCase();
-
-  return `JAMBO-${cleanName}-${randomPart}`;
+  const random = crypto.randomBytes(3).toString("hex").toUpperCase();
+  return `JAMBO-${cleanName}-${random}`;
 }
 
-function toNumber(value) {
-  const n = Number(value || 0);
-  return Number.isFinite(n) ? n : 0;
-}
-
-function calculateNights(checkIn, checkOut) {
-  if (!checkIn || !checkOut) return 0;
-
-  const start = new Date(checkIn).getTime();
-  const end = new Date(checkOut).getTime();
-
-  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 0;
-
-  return Math.round((end - start) / (1000 * 60 * 60 * 24));
-}
-
-function formatMoney(value, currency = "KES") {
-  return new Intl.NumberFormat(currency === "USD" ? "en-US" : "en-KE", {
-    style: "currency",
-    currency,
+function money(value) {
+  const number = Number(value || 0);
+  return number.toLocaleString("en-KE", {
     maximumFractionDigits: 0,
-  }).format(Number.isFinite(value) ? value : 0);
+  });
 }
 
 function calculatePackage(body) {
-  const adults = toNumber(body.adults);
-  const children = toNumber(body.children);
-  const totalTravellers = adults + children;
+  const adults = Number(body.adults || 0);
+  const children = Number(body.children || 0);
+  const totalTravellers = Math.max(adults + children, 1);
 
-  const isDayTrip = Boolean(body.isDayTrip);
-  const clientType = body.clientType === "USD" ? "USD" : "KES";
+  const nights = Number(body.nights || body.totalNights || 0);
+  const days = Number(body.days || 0);
 
   const hotels = Array.isArray(body.hotels) ? body.hotels : [];
   const activities = Array.isArray(body.activities) ? body.activities : [];
 
-  const numberOfDays = toNumber(body.numberOfDays);
-
-  const totalNights = isDayTrip
-    ? 0
-    : hotels.reduce((sum, hotel) => {
-        return sum + calculateNights(hotel.checkIn, hotel.checkOut);
-      }, 0) || Math.max(0, numberOfDays - 1);
-
-  const hotelTotal = isDayTrip
-    ? 0
-    : hotels.reduce((sum, hotel) => {
-        const nights = calculateNights(hotel.checkIn, hotel.checkOut) || totalNights;
-        return (
-          sum +
-          toNumber(hotel.doubleRoomRate) * nights +
-          toNumber(hotel.childRate) * children * nights
-        );
-      }, 0);
-
-  const mainTransportTotal = isDayTrip
-    ? toNumber(body.transportPricePerDay)
-    : toNumber(body.transportPricePerDay) * numberOfDays;
-
-  const adultParkRate =
-    clientType === "USD"
-      ? toNumber(body.nonResidentAdultFee)
-      : toNumber(body.residentAdultFee);
-
-  const childParkRate =
-    clientType === "USD"
-      ? toNumber(body.nonResidentChildFee)
-      : toNumber(body.residentChildFee);
-
-  const parkFeesTotal = isDayTrip
-    ? adultParkRate * adults + childParkRate * children
-    : (adultParkRate * adults + childParkRate * children) * totalNights;
-
-  const activitiesTotal = activities.reduce((sum, item) => {
-    return (
-      sum +
-      toNumber(item.adultRate) * adults +
-      toNumber(item.childRate) * children
-    );
+  const hotelTotal = hotels.reduce((sum, hotel) => {
+    const adultRate = Number(hotel.adultRate || 0);
+    const childRate = Number(hotel.childRate || 0);
+    return sum + adultRate * adults + childRate * children;
   }, 0);
 
-  const mealsTotal =
-    toNumber(body.mealsAdultRate) * adults +
-    toNumber(body.mealsChildRate) * children +
-    toNumber(body.groupMealBuffetRate);
+  const activitiesTotal = activities.reduce((sum, activity) => {
+    const adultRate = Number(activity.adultRate || 0);
+    const childRate = Number(activity.childRate || 0);
+    return sum + adultRate * adults + childRate * children;
+  }, 0);
 
-  const otherTransportTotal =
-    toNumber(body.trainAdultRate) * adults +
-    toNumber(body.trainChildRate) * children +
-    toNumber(body.balloonAdultRate) * adults +
-    toNumber(body.balloonChildRate) * children +
-    toNumber(body.flightAdultRate) * adults +
-    toNumber(body.flightChildRate) * children +
-    toNumber(body.boatAdultRate) * adults +
-    toNumber(body.boatChildRate) * children;
+  const mainTransportPrice = Number(body.mainTransportPrice || body.transportPrice || 0);
+  const transportDays = Number(body.transportDays || days || 0);
+  const mainTransportTotal = mainTransportPrice * transportDays;
+
+  const parkFeeAdult = Number(body.parkFeeAdult || 0);
+  const parkFeeChild = Number(body.parkFeeChild || 0);
+  const parkFeeNights = Number(body.parkFeeNights || nights || 0);
+  const parkFeesTotal = (parkFeeAdult * adults + parkFeeChild * children) * parkFeeNights;
+
+  const mealsTotal = Number(body.mealsTotal || 0);
+  const otherTransportTotal = Number(body.otherTransportTotal || 0);
+  const fuelTotal = Number(body.fuelTotal || 0);
+  const driverTotal = Number(body.driverTotal || 0);
 
   const subtotal =
     hotelTotal +
+    activitiesTotal +
     mainTransportTotal +
     parkFeesTotal +
-    activitiesTotal +
     mealsTotal +
-    otherTransportTotal;
+    otherTransportTotal +
+    fuelTotal +
+    driverTotal;
 
-  const markupAmount = subtotal * (toNumber(body.markupPercent) / 100);
+  const markupType = body.markupType || "amount";
+  const markupValue = Number(body.markupValue || body.markup || 0);
+  const markupAmount =
+    markupType === "percent" ? subtotal * (markupValue / 100) : markupValue;
+
   const finalTotal = subtotal + markupAmount;
-  const pricePerPerson = totalTravellers > 0 ? finalTotal / totalTravellers : 0;
-
-  const activityNames = activities
-    .map((item) => String(item.name || "").trim())
-    .filter(Boolean);
-
-  const includes = [
-    !isDayTrip && hotelTotal > 0 ? "Accommodation" : "",
-    body.mainTransport && body.mainTransport !== "None"
-      ? `Transport by ${body.mainTransport}`
-      : "",
-    parkFeesTotal > 0 ? "Park Fees" : "",
-    activityNames.length ? `Activities: ${activityNames.join(", ")}` : "",
-    mealsTotal > 0 ? "Meals" : "",
-    "Professional driver guide",
-  ].filter(Boolean);
+  const pricePerPerson = finalTotal / totalTravellers;
 
   return {
     success: true,
-    currencyMode: clientType,
     totalTravellers,
-    totalNights,
+    totalNights: nights,
     hotelTotal,
-    hotelPerPerson: totalTravellers > 0 ? hotelTotal / totalTravellers : 0,
     mainTransportTotal,
-    transportPerPerson:
-      totalTravellers > 0 ? mainTransportTotal / totalTravellers : 0,
     parkFeesTotal,
-    parkFeePerPerson:
-      totalTravellers > 0 ? parkFeesTotal / totalTravellers : 0,
     activitiesTotal,
     mealsTotal,
     otherTransportTotal,
-    extrasTotal: mealsTotal + otherTransportTotal,
+    fuelTotal,
+    driverTotal,
     markupAmount,
     finalTotal,
     pricePerPerson,
-    displayFinalTotal: finalTotal,
-    displayPricePerPerson: pricePerPerson,
-    includes,
-    transportCalculationText: "",
+    includes: body.includes || [],
   };
 }
 
-function buildQuotationText(body, calculation) {
-  const currency = calculation.currencyMode || body.clientType || "KES";
+async function sendEmail({ to, subject, html }) {
+  if (!process.env.RESEND_API_KEY) {
+    throw new Error("Missing RESEND_API_KEY in Render Environment Variables");
+  }
 
-  const includesText = (calculation.includes || [])
-    .map((item) => `• ${item}`)
-    .join("\n");
-
-  const excludes = Array.isArray(body.excludes) ? body.excludes : [];
-  const excludesText = excludes.length
-    ? excludes.map((item) => `• ${item}`).join("\n")
-    : "• Anything not mentioned above";
-
-  return `
-${body.companyName || "Jambo Trip 360"}
-Travel Package Quotation
-
-Prepared by: ${body.preparedBy || "-"}
-Phone: ${body.companyPhone || "-"}
-Email: ${body.companyEmail || "-"}
-Website: ${body.companyWebsite || "-"}
-
-Lead Client: ${body.leadClientName || "-"}
-Travellers: ${calculation.totalTravellers}
-Adults: ${body.adults || "0"}
-Children: ${body.children || "0"}
-Trip Type: ${body.tripType || "-"}
-Client Type: ${currency === "USD" ? "Non-Resident" : "Resident"}
-Destination(s): ${(body.destinations || []).join(", ") || "-"}
-Hotel(s): ${(body.hotels || []).map((h) => h.name).filter(Boolean).join(", ") || "-"}
-
-Total Package Price: ${formatMoney(calculation.displayFinalTotal, currency)}
-Price Per Person: ${formatMoney(calculation.displayPricePerPerson, currency)}
-
-Includes
-${includesText || "• Transport"}
-
-Excludes
-${excludesText}
-  `.trim();
+  return resend.emails.send({
+    from: "Jambo Trip 360 <onboarding@resend.dev>",
+    to,
+    subject,
+    html,
+  });
 }
 
-const transporter =
-  process.env.EMAIL_USER && process.env.EMAIL_PASS
-
-app.post("/trial/start", (req, res) => {
-  const email = normalizeEmail(req.body.email);
-  const phone = normalizePhone(req.body.phone);
-
-  if (!email || !email.includes("@") || !phone) {
-    return res.status(400).json({
-      allowed: false,
-      message: "Valid email and phone are required.",
-    });
-  }
-
-  const data = readData();
-  const key = userKey(email, phone);
-
-  if (data.licenses[key]?.active) {
-    return res.json({
-      allowed: true,
-      unlocked: true,
-      email,
-      phone,
-      remainingMs: 0,
-      message: "Subscription active.",
-    });
-  }
-
-  if (!data.trials[key]) {
-    data.trials[key] = {
-      email,
-      phone,
-      startedAt: Date.now(),
-    };
-    writeData(data);
-  }
-
-  const trial = data.trials[key];
-  const expiresAt = trial.startedAt + TRIAL_HOURS * 60 * 60 * 1000;
-  const remainingMs = Math.max(0, expiresAt - Date.now());
-
-  if (remainingMs <= 0) {
-    return res.json({
-      allowed: false,
-      unlocked: false,
-      email,
-      phone,
-      remainingMs: 0,
-      message: "Trial ended. Please activate subscription.",
-    });
-  }
-
-  res.json({
-    allowed: true,
-    unlocked: false,
-    email,
-    phone,
-    remainingMs,
-    message: "Trial active.",
-  });
-});
-
-app.get("/trial/status", (req, res) => {
-  const email = normalizeEmail(req.query.email);
-  const phone = normalizePhone(req.query.phone);
-
-  if (!email || !phone) {
-    return res.status(400).json({
-      allowed: false,
-      message: "Email and phone are required.",
-    });
-  }
-
-  const data = readData();
-  const key = userKey(email, phone);
-
-  if (data.licenses[key]?.active) {
-    return res.json({
-      allowed: true,
-      unlocked: true,
-      email,
-      phone,
-      remainingMs: 0,
-      message: "Subscription active.",
-    });
-  }
-
-  const trial = data.trials[key];
-
-  if (!trial) {
-    return res.json({
-      allowed: false,
-      unlocked: false,
-      email,
-      phone,
-      remainingMs: 0,
-      message: "No trial found.",
-    });
-  }
-
-  const expiresAt = trial.startedAt + TRIAL_HOURS * 60 * 60 * 1000;
-  const remainingMs = Math.max(0, expiresAt - Date.now());
-
-  res.json({
-    allowed: remainingMs > 0,
-    unlocked: false,
-    email,
-    phone,
-    remainingMs,
-    message:
-      remainingMs > 0
-        ? "Trial active."
-        : "Trial ended. Please activate subscription.",
-  });
-});
-
-app.post("/activate", (req, res) => {
-  const email = normalizeEmail(req.body.email);
-  const phone = normalizePhone(req.body.phone);
-  const code = String(req.body.code || "").trim().toUpperCase();
-
-  if (!email || !phone || !code) {
-    return res.status(400).json({
-      success: false,
-      message: "Email, phone, and activation code are required.",
-    });
-  }
-
-  const data = readData();
-  const key = userKey(email, phone);
-  const activation = data.activationCodes[code];
-
-  if (!activation) {
-    return res.status(400).json({
-      success: false,
-      message: "Invalid activation code.",
-    });
-  }
-
-  if (activation.used) {
-    return res.status(400).json({
-      success: false,
-      message: "This activation code has already been used.",
-    });
-  }
-
-  if (
-    normalizeEmail(activation.email) !== email ||
-    normalizePhone(activation.phone) !== phone
-  ) {
-    return res.status(403).json({
-      success: false,
-      message: "This code does not belong to this email and phone number.",
-    });
-  }
-
-  activation.used = true;
-  activation.usedAt = Date.now();
-
-  data.licenses[key] = {
-    email,
-    phone,
-    active: true,
-    activatedAt: Date.now(),
-    code,
-    subscription: SUBSCRIPTION_AMOUNT,
-  };
-
-  writeData(data);
-
-  res.json({
-    success: true,
-    unlocked: true,
-    message: "Activation successful.",
-  });
-});
-
-app.post("/admin/generate-code", (req, res) => {
-  const adminSecret = String(req.headers["x-admin-secret"] || "");
-  const expectedSecret = String(process.env.ADMIN_SECRET || "");
-
-  if (!expectedSecret || adminSecret !== expectedSecret) {
-    return res.status(401).json({
-      success: false,
-      message: "Unauthorized.",
-    });
-  }
-
-  const email = normalizeEmail(req.body.email);
-  const phone = normalizePhone(req.body.phone);
-  const name = String(req.body.name || "Agent").trim();
-
-  if (!email || !email.includes("@") || !phone) {
-    return res.status(400).json({
-      success: false,
-      message: "Valid email and phone are required.",
-    });
-  }
-
-  const data = readData();
-  let code = generateActivationCode(name);
-
-  while (data.activationCodes[code]) {
-    code = generateActivationCode(name);
-  }
-
-  data.activationCodes[code] = {
-    email,
-    phone,
-    name,
-    used: false,
-    createdAt: Date.now(),
-  };
-
-  writeData(data);
-
-  res.json({
-    success: true,
-    code,
-    email,
-    phone,
-    message: "Activation code generated successfully.",
-  });
+app.get("/", (req, res) => {
+  res.send("Jambo Trip 360 backend is running securely");
 });
 
 app.post("/calculate", (req, res) => {
   try {
-    const result = calculatePackage(req.body);
-    res.json(result);
+    const calculation = calculatePackage(req.body);
+    res.json(calculation);
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: "Calculation failed.",
+      message: "Calculation failed",
+      error: error.message,
+    });
+  }
+});
+
+app.post("/trial/start", async (req, res) => {
+  try {
+    const name = String(req.body.name || "").trim();
+    const email = normalizeEmail(req.body.email);
+    const phone = normalizePhone(req.body.phone);
+
+    if (!name || !email || !email.includes("@") || !phone.startsWith("+2547")) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid name, email, and +2547 phone number are required.",
+      });
+    }
+
+    const data = readData();
+    const key = userKey(email, phone);
+
+    if (data.licenses[key]?.active) {
+      return res.json({
+        success: true,
+        allowed: true,
+        unlocked: true,
+        message: "Account already activated.",
+      });
+    }
+
+    if (data.trials[key]) {
+      const trial = data.trials[key];
+      const startedAt = Number(trial.startedAt);
+      const expiresAt = startedAt + TRIAL_HOURS * 60 * 60 * 1000;
+      const now = Date.now();
+
+      if (now > expiresAt) {
+        return res.status(403).json({
+          success: false,
+          allowed: false,
+          expired: true,
+          message: "Trial expired. Please activate your account.",
+        });
+      }
+
+      return res.json({
+        success: true,
+        allowed: true,
+        unlocked: false,
+        name: trial.name,
+        email,
+        phone,
+        startedAt,
+        expiresAt,
+        trialHours: TRIAL_HOURS,
+      });
+    }
+
+    const startedAt = Date.now();
+    const expiresAt = startedAt + TRIAL_HOURS * 60 * 60 * 1000;
+
+    data.trials[key] = {
+      name,
+      email,
+      phone,
+      startedAt,
+      expiresAt,
+    };
+
+    saveData(data);
+
+    res.json({
+      success: true,
+      allowed: true,
+      unlocked: false,
+      name,
+      email,
+      phone,
+      startedAt,
+      expiresAt,
+      trialHours: TRIAL_HOURS,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Unable to start trial",
+      error: error.message,
+    });
+  }
+});
+
+app.post("/trial/check", (req, res) => {
+  try {
+    const email = normalizeEmail(req.body.email);
+    const phone = normalizePhone(req.body.phone);
+    const data = readData();
+    const key = userKey(email, phone);
+
+    if (data.licenses[key]?.active) {
+      return res.json({
+        success: true,
+        allowed: true,
+        unlocked: true,
+        message: "Account active.",
+      });
+    }
+
+    const trial = data.trials[key];
+
+    if (!trial) {
+      return res.json({
+        success: true,
+        allowed: false,
+        trialStarted: false,
+      });
+    }
+
+    const now = Date.now();
+    const startedAt = Number(trial.startedAt);
+    const expiresAt = startedAt + TRIAL_HOURS * 60 * 60 * 1000;
+
+    if (now > expiresAt) {
+      return res.json({
+        success: true,
+        allowed: false,
+        expired: true,
+        startedAt,
+        expiresAt,
+      });
+    }
+
+    res.json({
+      success: true,
+      allowed: true,
+      unlocked: false,
+      name: trial.name,
+      email,
+      phone,
+      startedAt,
+      expiresAt,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Trial check failed",
+      error: error.message,
+    });
+  }
+});
+
+app.post("/admin/generate-code", async (req, res) => {
+  try {
+    const adminSecret = String(req.headers["x-admin-secret"] || "");
+    const expectedSecret = String(process.env.ADMIN_SECRET || "");
+
+    if (!expectedSecret || adminSecret !== expectedSecret) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized.",
+      });
+    }
+
+    const name = String(req.body.name || "Agent").trim();
+    const email = normalizeEmail(req.body.email);
+    const phone = normalizePhone(req.body.phone);
+
+    if (!email || !email.includes("@") || !phone.startsWith("+2547")) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid email and +2547 phone are required.",
+      });
+    }
+
+    const data = readData();
+    const key = userKey(email, phone);
+    const code = generateCode(name);
+
+    data.activationCodes[code] = {
+      code,
+      name,
+      email,
+      phone,
+      key,
+      active: true,
+      used: false,
+      createdAt: Date.now(),
+      amount: SUBSCRIPTION_AMOUNT,
+    };
+
+    saveData(data);
+
+    try {
+      await sendEmail({
+        to: email,
+        subject: "Your Jambo Trip 360 Activation Code",
+        html: `
+          <div style="font-family:Arial,sans-serif;line-height:1.6;color:#111">
+            <h2>Jambo Trip 360 Activation Code</h2>
+            <p>Hello ${name},</p>
+            <p>Your activation code is:</p>
+            <h1 style="color:#0057B8;letter-spacing:1px">${code}</h1>
+            <p>Use this code to unlock your Jambo Trip 360 account.</p>
+            <p><strong>Subscription:</strong> ${SUBSCRIPTION_AMOUNT}</p>
+          </div>
+        `,
+      });
+    } catch (emailError) {
+      return res.json({
+        success: true,
+        emailSent: false,
+        code,
+        name,
+        email,
+        phone,
+        message: "Activation code generated, but email failed.",
+        emailError: emailError.message,
+      });
+    }
+
+    res.json({
+      success: true,
+      emailSent: true,
+      code,
+      name,
+      email,
+      phone,
+      message: "Activation code generated and emailed successfully.",
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Could not generate activation code.",
+      error: error.message,
+    });
+  }
+});
+
+app.post("/activate", (req, res) => {
+  try {
+    const email = normalizeEmail(req.body.email);
+    const phone = normalizePhone(req.body.phone);
+    const code = String(req.body.code || "").trim().toUpperCase();
+
+    const data = readData();
+    const key = userKey(email, phone);
+    const activation = data.activationCodes[code];
+
+    if (!activation || !activation.active) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid activation code.",
+      });
+    }
+
+    if (activation.used) {
+      return res.status(400).json({
+        success: false,
+        message: "This activation code has already been used.",
+      });
+    }
+
+    if (activation.email !== email || activation.phone !== phone) {
+      return res.status(400).json({
+        success: false,
+        message: "Activation details do not match.",
+      });
+    }
+
+    activation.used = true;
+    activation.usedAt = Date.now();
+
+    data.licenses[key] = {
+      active: true,
+      email,
+      phone,
+      activatedAt: Date.now(),
+      code,
+      amount: SUBSCRIPTION_AMOUNT,
+    };
+
+    data.activationCodes[code] = activation;
+    saveData(data);
+
+    res.json({
+      success: true,
+      unlocked: true,
+      message: "Activation successful.",
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Activation failed.",
       error: error.message,
     });
   }
@@ -502,30 +497,32 @@ app.post("/calculate", (req, res) => {
 
 app.post("/send-quotation", async (req, res) => {
   try {
-    if (!transporter) {
-      return res.status(500).json({
-        success: false,
-        message: "Email is not configured. Add EMAIL_USER and EMAIL_PASS.",
-      });
-    }
+    const to = normalizeEmail(req.body.to || req.body.clientEmail);
+    const subject = req.body.subject || "Your Safari Quotation - Jambo Trip 360";
 
-    const calculation = req.body.calculation || calculatePackage(req.body);
-    const quoteText = req.body.quoteText || buildQuotationText(req.body, calculation);
-
-    const clientEmail = normalizeEmail(req.body.clientEmail);
-
-    if (!clientEmail) {
+    if (!to || !to.includes("@")) {
       return res.status(400).json({
         success: false,
-        message: "Client email is required.",
+        message: "Valid client email is required.",
       });
     }
 
-    await transporter.sendMail({
-      from: `"${req.body.companyName || "Jambo Trip 360"}" <${process.env.EMAIL_USER}>`,
-      to: clientEmail,
-      subject: `Travel Quotation - ${req.body.leadClientName || "Client"}`,
-      text: quoteText,
+    const calculation = calculatePackage(req.body);
+
+    const html = `
+      <div style="font-family:Arial,sans-serif;color:#111;line-height:1.6">
+        <h2>Safari Package Quotation</h2>
+        <p>Thank you for your enquiry. Please find your package summary below.</p>
+        <h3>Total Package Price: KES ${money(calculation.finalTotal)}</h3>
+        <h3>Price Per Person: KES ${money(calculation.pricePerPerson)}</h3>
+        <p>This quotation was prepared using Jambo Trip 360.</p>
+      </div>
+    `;
+
+    await sendEmail({
+      to,
+      subject,
+      html,
     });
 
     res.json({
@@ -562,6 +559,6 @@ app.get("/test-email", async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`🚀 Server running on port ${PORT}`);
 });
