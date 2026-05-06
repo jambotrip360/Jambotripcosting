@@ -543,14 +543,11 @@ app.post("/send-quotation", async (req, res) => {
 
 app.get("/test-email", async (req, res) => {
   try {
-    if (!transporter) {
-      return res.status(500).json({
-        success: false,
-        message: "Email setup failed. EMAIL_USER or EMAIL_PASS missing.",
-      });
-    }
-
-    await transporter.verify();
+    await sendEmail({
+      to: "jambotrip360@gmail.com",
+      subject: "Jambo Trip 360 Test Email",
+      html: "<h2>Email is working perfectly ✅</h2><p>Resend is connected successfully.</p>",
+    });
 
     res.json({
       success: true,
