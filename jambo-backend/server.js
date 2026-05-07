@@ -253,12 +253,13 @@ app.post("/trial/start", async (req, res) => {
       return res.json({
         success: true,
         allowed: true,
+        remainingMs: expiresAt - now,
+        expiresAt,
         unlocked: false,
         name: trial.name,
         email,
         phone,
         startedAt,
-        expiresAt,
         trialHours: TRIAL_HOURS,
       });
     }
