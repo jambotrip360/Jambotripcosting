@@ -681,15 +681,23 @@ export default function App() {
       const cleanAgentPhone = cleanPhone(agentPhone);
 
       const response = await fetch(`${API_BASE}/trial/start`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: cleanEmail, phone: cleanAgentPhone }),
-      });
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    name: agentName.trim(),
+    email: cleanEmail,
+    phone: cleanAgentPhone,
+  }),
+});
 
       const data = await response.json();
 
       if (data.allowed || data.unlocked) {
-        const info = { name: agentName.trim(), email: cleanEmail, phone: cleanAgentPhone };
+        const info = {
+  name: agentName.trim(),
+  email: agentEmail.trim().toLowerCase(),
+  phone: agentPhone.trim(),
+};
         localStorage.setItem(AGENT_STORAGE_KEY, JSON.stringify(info));
         localStorage.setItem(TRIAL_EMAIL_KEY, cleanEmail);
         localStorage.setItem(TRIAL_PHONE_KEY, cleanAgentPhone);
