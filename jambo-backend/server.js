@@ -297,10 +297,11 @@ app.post("/trial/start", async (req, res) => {
   }
 });
 
-app.post("/trial/check", (req, res) => {
+app.get("/trial/status", (req, res) => {
   try {
-    const email = normalizeEmail(req.body.email);
-    const phone = normalizePhone(req.body.phone);
+    const email = normalizeEmail(req.query.email);
+    const phone = normalizePhone(req.query.phone);
+
     const data = readData();
     const key = userKey(email, phone);
 
@@ -309,6 +310,7 @@ app.post("/trial/check", (req, res) => {
         success: true,
         allowed: true,
         unlocked: true,
+        remainingMs: 0,
         message: "Account active.",
       });
     }
@@ -319,25 +321,30 @@ app.post("/trial/check", (req, res) => {
       return res.json({
         success: true,
         allowed: false,
+        unlocked: false,
         trialStarted: false,
+        remainingMs: 0,
       });
     }
 
     const now = Date.now();
     const startedAt = Number(trial.startedAt);
     const expiresAt = startedAt + TRIAL_HOURS * 60 * 60 * 1000;
+    const remainingMs = Math.max(0, expiresAt - now);
 
-    if (now > expiresAt) {
+    if (remainingMs <= 0) {
       return res.json({
         success: true,
         allowed: false,
         expired: true,
+        unlocked: false,
+        remainingMs: 0,
         startedAt,
         expiresAt,
       });
     }
 
-    res.json({
+    return res.json({
       success: true,
       allowed: true,
       unlocked: false,
@@ -346,6 +353,8 @@ app.post("/trial/check", (req, res) => {
       phone,
       startedAt,
       expiresAt,
+      remainingMs,
+      trialHours: TRIAL_HOURS,
     });
   } catch (error) {
     res.status(500).json({
