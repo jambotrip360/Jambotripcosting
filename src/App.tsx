@@ -667,9 +667,9 @@ export default function App() {
   !agentName.trim() ||
   !agentEmail.trim() ||
   !agentEmail.includes("@") ||
-  !/^\+2547\d{8}$/.test(agentPhone.trim())
+  !agentPhone.trim()
 ) {
-  setTrialError("Valid name, email, and +2547 phone number are required.");
+  setTrialError("Please enter name, email, and phone number.");
   return;
 }
 
