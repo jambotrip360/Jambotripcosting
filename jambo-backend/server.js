@@ -71,7 +71,9 @@ function normalizePhone(phone) {
 
   if (value.startsWith("07")) {
     value = "+254" + value.substring(1);
-  } else if (value.startsWith("254")) {
+  } else if (value.startsWith("7")) {
+    value = "+254" + value;
+  } else if (value.startsWith("2547")) {
     value = "+" + value;
   }
 
@@ -209,12 +211,17 @@ app.post("/trial/start", async (req, res) => {
     const email = normalizeEmail(req.body.email);
     const phone = normalizePhone(req.body.phone);
 
-    if (!name || !email || !email.includes("@") || !phone.startsWith("+2547")) {
-      return res.status(400).json({
-        success: false,
-        message: "Valid name, email, and +2547 phone number are required.",
-      });
-    }
+    if (
+  !name ||
+  !email ||
+  !email.includes("@") ||
+  !/^\+2547\d{8}$/.test(phone)
+) {
+  return res.status(400).json({
+    success: false,
+    message: "Valid name, email, and +2547 phone number are required.",
+  });
+}
 
     const data = readData();
     const key = userKey(email, phone);
