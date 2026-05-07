@@ -219,7 +219,7 @@ app.post("/trial/start", async (req, res) => {
 ) {
   return res.status(400).json({
     success: false,
-    message: "Valid name, email, and +2547 phone number are required.",
+    message: "Please enter name, email, and phone number.",
   });
 }
 
@@ -371,7 +371,7 @@ app.post("/admin/generate-code", async (req, res) => {
     const email = normalizeEmail(req.body.email);
     const phone = normalizePhone(req.body.phone);
 
-    if (!email || !email.includes("@") || !phone.startsWith("+2547")) {
+    if (!email || !email.includes("@") || !phone) {
       return res.status(400).json({
         success: false,
         message: "Valid email and +2547 phone are required.",
