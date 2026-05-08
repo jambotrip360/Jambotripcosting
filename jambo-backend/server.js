@@ -542,6 +542,8 @@ app.post("/send-quotation", async (req, res) => {
       html,
     });
 
+console.log("Quotation email sent to:", to);
+
     res.json({
       success: true,
       message: "Quotation sent successfully.",
