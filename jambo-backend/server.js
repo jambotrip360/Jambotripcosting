@@ -181,7 +181,7 @@ async function sendEmail({ to, subject, html }) {
   }
 
   return resend.emails.send({
-    from: "Jambo Trip 360 <onboarding@resend.dev>",
+    from: "Jambo Trip 360 <quotes@jambotrip360.com>",
     to,
     subject,
     html,
