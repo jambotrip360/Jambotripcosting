@@ -24,8 +24,9 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 app.use(
   cors({
     origin: [
-      "https://jambotripcosting.vercel.app",
       "http://localhost:5173",
+  "https://jambotrip360.com",
+  "https://www.jambotrip360.com",
     ],
     methods: ["GET", "POST"],
     credentials: true,
