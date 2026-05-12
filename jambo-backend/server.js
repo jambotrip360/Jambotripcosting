@@ -6,6 +6,7 @@ import path from "path";
 import crypto from "crypto";
 import { fileURLToPath } from "url";
 import { Resend } from "resend";
+import PDFDocument from "pdfkit";
 
 dotenv.config();
 
@@ -25,8 +26,8 @@ app.use(
   cors({
     origin: [
       "http://localhost:5173",
-  "https://jambotrip360.com",
-  "https://www.jambotrip360.com",
+      "https://jambotrip360.com",
+      "https://www.jambotrip360.com",
     ],
     methods: ["GET", "POST"],
     credentials: true,
@@ -70,13 +71,9 @@ function normalizeEmail(email) {
 function normalizePhone(phone) {
   let value = String(phone || "").trim().replace(/\s/g, "");
 
-  if (value.startsWith("07")) {
-    value = "+254" + value.substring(1);
-  } else if (value.startsWith("7")) {
-    value = "+254" + value;
-  } else if (value.startsWith("2547")) {
-    value = "+" + value;
-  }
+  if (value.startsWith("07")) value = "+254" + value.substring(1);
+  else if (value.startsWith("7")) value = "+254" + value;
+  else if (value.startsWith("2547")) value = "+" + value;
 
   return value;
 }
@@ -114,7 +111,7 @@ function calculatePackage(body) {
   const activities = Array.isArray(body.activities) ? body.activities : [];
 
   const hotelTotal = hotels.reduce((sum, hotel) => {
-    const adultRate = Number(hotel.adultRate || 0);
+    const adultRate = Number(hotel.adultRate || hotel.doubleRate || 0);
     const childRate = Number(hotel.childRate || 0);
     return sum + adultRate * adults + childRate * children;
   }, 0);
@@ -125,14 +122,17 @@ function calculatePackage(body) {
     return sum + adultRate * adults + childRate * children;
   }, 0);
 
-  const mainTransportPrice = Number(body.mainTransportPrice || body.transportPrice || 0);
+  const mainTransportPrice = Number(
+    body.mainTransportPrice || body.transportPrice || 0
+  );
   const transportDays = Number(body.transportDays || days || 0);
   const mainTransportTotal = mainTransportPrice * transportDays;
 
   const parkFeeAdult = Number(body.parkFeeAdult || 0);
   const parkFeeChild = Number(body.parkFeeChild || 0);
   const parkFeeNights = Number(body.parkFeeNights || nights || 0);
-  const parkFeesTotal = (parkFeeAdult * adults + parkFeeChild * children) * parkFeeNights;
+  const parkFeesTotal =
+    (parkFeeAdult * adults + parkFeeChild * children) * parkFeeNights;
 
   const mealsTotal = Number(body.mealsTotal || 0);
   const otherTransportTotal = Number(body.otherTransportTotal || 0);
@@ -173,10 +173,11 @@ function calculatePackage(body) {
     finalTotal,
     pricePerPerson,
     includes: body.includes || [],
+    excludes: body.excludes || [],
   };
 }
 
-async function sendEmail({ to, subject, html }) {
+async function sendEmail({ to, subject, html, attachments = [] }) {
   if (!process.env.RESEND_API_KEY) {
     throw new Error("Missing RESEND_API_KEY in Render Environment Variables");
   }
@@ -186,6 +187,91 @@ async function sendEmail({ to, subject, html }) {
     to,
     subject,
     html,
+    attachments,
+  });
+}
+
+function generateQuotationPDF({ to, calculation, body }) {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ margin: 50 });
+    const chunks = [];
+
+    doc.on("data", (chunk) => chunks.push(chunk));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+
+    doc.fontSize(22).text("Jambo Trip 360", { align: "center" });
+    doc.moveDown(0.5);
+    doc.fontSize(18).text("Safari Package Quotation", { align: "center" });
+    doc.moveDown();
+
+    doc.fontSize(12).text(`Client Email: ${to}`);
+    doc.text(`Total Travellers: ${calculation.totalTravellers}`);
+    doc.text(`Total Nights: ${calculation.totalNights}`);
+    doc.moveDown();
+
+    doc.fontSize(15).text("Client Quotation Summary", { underline: true });
+    doc.moveDown(0.5);
+    doc.fontSize(13).text(`Total Package Price: KES ${money(calculation.finalTotal)}`);
+    doc.text(`Price Per Person: KES ${money(calculation.pricePerPerson)}`);
+    doc.moveDown();
+
+    if (Array.isArray(body.hotels) && body.hotels.length > 0) {
+      doc.fontSize(15).text("Hotels", { underline: true });
+      doc.moveDown(0.5);
+      body.hotels.forEach((hotel, index) => {
+        doc.fontSize(12).text(
+          `${index + 1}. ${hotel.name || "Hotel"} - ${hotel.mealPlan || ""}`
+        );
+      });
+      doc.moveDown();
+    }
+
+    if (Array.isArray(body.activities) && body.activities.length > 0) {
+      doc.fontSize(15).text("Activities", { underline: true });
+      doc.moveDown(0.5);
+      body.activities.forEach((activity, index) => {
+        doc.fontSize(12).text(`${index + 1}. ${activity.name || "Activity"}`);
+      });
+      doc.moveDown();
+    }
+
+    if (Array.isArray(calculation.includes) && calculation.includes.length > 0) {
+      doc.fontSize(15).text("Includes", { underline: true });
+      doc.moveDown(0.5);
+      calculation.includes.forEach((item) => {
+        doc.fontSize(12).text(`• ${item}`);
+      });
+      doc.moveDown();
+    }
+
+    if (Array.isArray(calculation.excludes) && calculation.excludes.length > 0) {
+      doc.fontSize(15).text("Excludes", { underline: true });
+      doc.moveDown(0.5);
+      calculation.excludes.forEach((item) => {
+        doc.fontSize(12).text(`• ${item}`);
+      });
+      doc.moveDown();
+    }
+
+    doc.fontSize(15).text("Internal Cost Breakdown", { underline: true });
+    doc.moveDown(0.5);
+    doc.fontSize(12).text(`Hotel Total: KES ${money(calculation.hotelTotal)}`);
+    doc.text(`Transport Total: KES ${money(calculation.mainTransportTotal)}`);
+    doc.text(`Park Fees Total: KES ${money(calculation.parkFeesTotal)}`);
+    doc.text(`Activities Total: KES ${money(calculation.activitiesTotal)}`);
+    doc.text(`Meals Total: KES ${money(calculation.mealsTotal)}`);
+    doc.text(`Other Transport Total: KES ${money(calculation.otherTransportTotal)}`);
+    doc.text(`Fuel Total: KES ${money(calculation.fuelTotal)}`);
+    doc.text(`Driver Total: KES ${money(calculation.driverTotal)}`);
+    doc.text(`Markup Amount: KES ${money(calculation.markupAmount)}`);
+    doc.moveDown();
+
+    doc.fontSize(10).text("This quotation was prepared using Jambo Trip 360.", {
+      align: "center",
+    });
+
+    doc.end();
   });
 }
 
@@ -212,17 +298,12 @@ app.post("/trial/start", async (req, res) => {
     const email = normalizeEmail(req.body.email);
     const phone = normalizePhone(req.body.phone);
 
-    if (
-  !name ||
-  !email ||
-  !email.includes("@") ||
-  !/^\+2547\d{8}$/.test(phone)
-) {
-  return res.status(400).json({
-    success: false,
-    message: "Please enter name, email, and phone number.",
-  });
-}
+    if (!name || !email || !email.includes("@") || !/^\+2547\d{8}$/.test(phone)) {
+      return res.status(400).json({
+        success: false,
+        message: "Please enter name, email, and phone number.",
+      });
+    }
 
     const data = readData();
     const key = userKey(email, phone);
@@ -407,33 +488,20 @@ app.post("/admin/generate-code", async (req, res) => {
 
     saveData(data);
 
-    try {
-      await sendEmail({
-        to: email,
-        subject: "Your Jambo Trip 360 Activation Code",
-        html: `
-          <div style="font-family:Arial,sans-serif;line-height:1.6;color:#111">
-            <h2>Jambo Trip 360 Activation Code</h2>
-            <p>Hello ${name},</p>
-            <p>Your activation code is:</p>
-            <h1 style="color:#0057B8;letter-spacing:1px">${code}</h1>
-            <p>Use this code to unlock your Jambo Trip 360 account.</p>
-            <p><strong>Subscription:</strong> ${SUBSCRIPTION_AMOUNT}</p>
-          </div>
-        `,
-      });
-    } catch (emailError) {
-      return res.json({
-        success: true,
-        emailSent: false,
-        code,
-        name,
-        email,
-        phone,
-        message: "Activation code generated, but email failed.",
-        emailError: emailError.message,
-      });
-    }
+    await sendEmail({
+      to: email,
+      subject: "Your Jambo Trip 360 Activation Code",
+      html: `
+        <div style="font-family:Arial,sans-serif;line-height:1.6;color:#111">
+          <h2>Jambo Trip 360 Activation Code</h2>
+          <p>Hello ${name},</p>
+          <p>Your activation code is:</p>
+          <h1 style="color:#0057B8;letter-spacing:1px">${code}</h1>
+          <p>Use this code to unlock your Jambo Trip 360 account.</p>
+          <p><strong>Subscription:</strong> ${SUBSCRIPTION_AMOUNT}</p>
+        </div>
+      `,
+    });
 
     res.json({
       success: true,
@@ -526,11 +594,16 @@ app.post("/send-quotation", async (req, res) => {
     }
 
     const calculation = calculatePackage(req.body);
+    const pdfBuffer = await generateQuotationPDF({
+      to,
+      calculation,
+      body: req.body,
+    });
 
     const html = `
       <div style="font-family:Arial,sans-serif;color:#111;line-height:1.6">
         <h2>Safari Package Quotation</h2>
-        <p>Thank you for your enquiry. Please find your package summary below.</p>
+        <p>Thank you for your enquiry. Please find your quotation PDF attached.</p>
         <h3>Total Package Price: KES ${money(calculation.finalTotal)}</h3>
         <h3>Price Per Person: KES ${money(calculation.pricePerPerson)}</h3>
         <p>This quotation was prepared using Jambo Trip 360.</p>
@@ -541,15 +614,23 @@ app.post("/send-quotation", async (req, res) => {
       to,
       subject,
       html,
+      attachments: [
+        {
+          filename: "Jambo-Trip-360-Quotation.pdf",
+          content: pdfBuffer,
+        },
+      ],
     });
 
-console.log("Quotation email sent to:", to);
+    console.log("Quotation email with PDF sent to:", to);
 
     res.json({
       success: true,
-      message: "Quotation sent successfully.",
+      message: "Quotation sent successfully with PDF attachment.",
     });
   } catch (error) {
+    console.error("Quotation email failed:", error);
+
     res.status(500).json({
       success: false,
       message: "Failed to send quotation.",
