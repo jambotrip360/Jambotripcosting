@@ -3,15 +3,13 @@ import cors from "cors";
 import dotenv from "dotenv";
 import fs from "fs";
 import path from "path";
-import crypto from "crypto";
-import { fileURLToPath } from "url";
-import { Resend } from "resend";
 import PDFDocument from "pdfkit";
+import { Resend } from "resend";
+import { fileURLToPath } from "url";
 
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 5000;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,30 +20,37 @@ const SUBSCRIPTION_AMOUNT = "KES 5,000 per month";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
+const ALLOWED_ORIGINS = [
+  "https://jambotrip360.com",
+  "https://www.jambotrip360.com",
+  "http://localhost:5173",
+];
+
 app.use(
   cors({
-    origin: [
-      "http://localhost:5173",
-      "https://jambotrip360.com",
-      "https://www.jambotrip360.com",
-    ],
-    methods: ["GET", "POST"],
+    origin(origin, callback) {
+      if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`CORS blocked origin: ${origin}`));
+      }
+    },
+    methods: ["GET", "POST", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
   })
 );
+
+app.options("*", cors());
 
 app.use(express.json({ limit: "25mb" }));
 
 function readData() {
   if (!fs.existsSync(DATA_FILE)) {
-    const starter = {
+    return {
       trials: {},
-      activationCodes: {},
-      licenses: {},
-      usedCodes: {},
+      unlocks: {},
     };
-    fs.writeFileSync(DATA_FILE, JSON.stringify(starter, null, 2));
-    return starter;
   }
 
   try {
@@ -53,613 +58,737 @@ function readData() {
   } catch {
     return {
       trials: {},
-      activationCodes: {},
-      licenses: {},
-      usedCodes: {},
+      unlocks: {},
     };
   }
 }
 
-function saveData(data) {
+function writeData(data) {
   fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
 }
 
-function normalizeEmail(email) {
-  return String(email || "").trim().toLowerCase();
+function normalizeEmail(email = "") {
+  return String(email).trim().toLowerCase();
 }
 
-function normalizePhone(phone) {
-  let value = String(phone || "").trim().replace(/\s/g, "");
-
-  if (value.startsWith("07")) value = "+254" + value.substring(1);
-  else if (value.startsWith("7")) value = "+254" + value;
-  else if (value.startsWith("2547")) value = "+" + value;
-
-  return value;
+function nowMs() {
+  return Date.now();
 }
 
-function userKey(email, phone) {
-  return `${normalizeEmail(email)}__${normalizePhone(phone)}`;
+function addHours(dateMs, hours) {
+  return dateMs + hours * 60 * 60 * 1000;
 }
 
-function generateCode(name) {
-  const cleanName = String(name || "AGENT")
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, "")
-    .slice(0, 12);
-
-  const random = crypto.randomBytes(3).toString("hex").toUpperCase();
-  return `JAMBO-${cleanName}-${random}`;
+function isTrialExpired(startedAt) {
+  return nowMs() > addHours(startedAt, TRIAL_HOURS);
 }
 
-function money(value) {
-  const number = Number(value || 0);
-  return number.toLocaleString("en-KE", {
+function formatMoney(amount, currency = "KES") {
+  const num = Number(amount || 0);
+  const safeCurrency = currency || "KES";
+
+  if (safeCurrency === "USD") {
+    return `USD ${num.toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+  }
+
+  return `Ksh ${num.toLocaleString("en-KE", {
     maximumFractionDigits: 0,
-  });
+  })}`;
 }
 
-function calculatePackage(body) {
-  const adults = Number(body.adults || 0);
-  const children = Number(body.children || 0);
-  const totalTravellers = Math.max(adults + children, 1);
+function cleanText(value, fallback = "") {
+  if (value === null || value === undefined) return fallback;
+  return String(value).trim() || fallback;
+}
 
-  const nights = Number(body.nights || body.totalNights || 0);
-  const days = Number(body.days || 0);
+function safeArray(value) {
+  return Array.isArray(value) ? value : [];
+}
 
-  const hotels = Array.isArray(body.hotels) ? body.hotels : [];
-  const activities = Array.isArray(body.activities) ? body.activities : [];
-
-  const hotelTotal = hotels.reduce((sum, hotel) => {
-    const adultRate = Number(hotel.adultRate || hotel.doubleRate || 0);
-    const childRate = Number(hotel.childRate || 0);
-    return sum + adultRate * adults + childRate * children;
-  }, 0);
-
-  const activitiesTotal = activities.reduce((sum, activity) => {
-    const adultRate = Number(activity.adultRate || 0);
-    const childRate = Number(activity.childRate || 0);
-    return sum + adultRate * adults + childRate * children;
-  }, 0);
-
-  const mainTransportPrice = Number(
-    body.mainTransportPrice || body.transportPrice || 0
+function getThemeColor(data) {
+  return (
+    data?.agencyBranding?.themeColor ||
+    data?.agencyThemeColor ||
+    data?.themeColor ||
+    data?.primaryColor ||
+    "#0F4C81"
   );
-  const transportDays = Number(body.transportDays || days || 0);
-  const mainTransportTotal = mainTransportPrice * transportDays;
+}
 
-  const parkFeeAdult = Number(body.parkFeeAdult || 0);
-  const parkFeeChild = Number(body.parkFeeChild || 0);
-  const parkFeeNights = Number(body.parkFeeNights || nights || 0);
-  const parkFeesTotal =
-    (parkFeeAdult * adults + parkFeeChild * children) * parkFeeNights;
-
-  const mealsTotal = Number(body.mealsTotal || 0);
-  const otherTransportTotal = Number(body.otherTransportTotal || 0);
-  const fuelTotal = Number(body.fuelTotal || 0);
-  const driverTotal = Number(body.driverTotal || 0);
-
-  const subtotal =
-    hotelTotal +
-    activitiesTotal +
-    mainTransportTotal +
-    parkFeesTotal +
-    mealsTotal +
-    otherTransportTotal +
-    fuelTotal +
-    driverTotal;
-
-  const markupType = body.markupType || "amount";
-  const markupValue = Number(body.markupValue || body.markup || 0);
-  const markupAmount =
-    markupType === "percent" ? subtotal * (markupValue / 100) : markupValue;
-
-  const finalTotal = subtotal + markupAmount;
-  const pricePerPerson = finalTotal / totalTravellers;
+function getAgency(data) {
+  const branding = data?.agencyBranding || data?.branding || {};
 
   return {
-    success: true,
-    totalTravellers,
-    totalNights: nights,
-    hotelTotal,
-    mainTransportTotal,
-    parkFeesTotal,
-    activitiesTotal,
-    mealsTotal,
-    otherTransportTotal,
-    fuelTotal,
-    driverTotal,
-    markupAmount,
-    finalTotal,
-    pricePerPerson,
-    includes: body.includes || [],
-    excludes: body.excludes || [],
+    name:
+      cleanText(branding.companyName) ||
+      cleanText(data?.agencyName) ||
+      cleanText(data?.companyName) ||
+      "Travel Agency",
+    logo:
+      branding.logo ||
+      data?.agencyLogo ||
+      data?.companyLogo ||
+      data?.logo ||
+      "",
+    phone:
+      cleanText(branding.phone) ||
+      cleanText(data?.agencyPhone) ||
+      cleanText(data?.companyPhone) ||
+      "",
+    email:
+      cleanText(branding.email) ||
+      cleanText(data?.agencyEmail) ||
+      cleanText(data?.companyEmail) ||
+      "",
+    website:
+      cleanText(branding.website) ||
+      cleanText(data?.agencyWebsite) ||
+      cleanText(data?.companyWebsite) ||
+      "",
+    preparedBy:
+      cleanText(branding.preparedBy) ||
+      cleanText(data?.preparedBy) ||
+      cleanText(data?.agentName) ||
+      "",
+    themeColor: getThemeColor(data),
   };
 }
 
-async function sendEmail({ to, subject, html, attachments = [] }) {
-  if (!process.env.RESEND_API_KEY) {
-    throw new Error("Missing RESEND_API_KEY in Render Environment Variables");
-  }
-
-  return resend.emails.send({
-    from: "Jambo Trip 360 <quotes@jambotrip360.com>",
-    to,
-    subject,
-    html,
-    attachments,
-  });
+function getClientName(data) {
+  return (
+    cleanText(data?.leadClient) ||
+    cleanText(data?.clientName) ||
+    cleanText(data?.clientEmail) ||
+    "Client"
+  );
 }
 
-function generateQuotationPDF({ to, calculation, body }) {
+function drawRoundedRect(doc, x, y, w, h, r, fillColor) {
+  doc
+    .roundedRect(x, y, w, h, r)
+    .fill(fillColor);
+}
+
+function addLogo(doc, logoData, x, y, size) {
+  if (!logoData || typeof logoData !== "string") return false;
+
+  try {
+    if (logoData.startsWith("data:image")) {
+      const base64 = logoData.split(",")[1];
+      const buffer = Buffer.from(base64, "base64");
+      doc.image(buffer, x, y, {
+        fit: [size, size],
+        align: "center",
+        valign: "center",
+      });
+      return true;
+    }
+
+    if (fs.existsSync(logoData)) {
+      doc.image(logoData, x, y, {
+        fit: [size, size],
+        align: "center",
+        valign: "center",
+      });
+      return true;
+    }
+  } catch {
+    return false;
+  }
+
+  return false;
+}
+
+function buildQuotationPdfBuffer(data) {
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ margin: 50 });
+    const doc = new PDFDocument({
+      size: "A4",
+      margin: 50,
+      bufferPages: true,
+    });
+
     const chunks = [];
 
     doc.on("data", (chunk) => chunks.push(chunk));
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
 
-    doc.fontSize(22).text("Jambo Trip 360", { align: "center" });
-    doc.moveDown(0.5);
-    doc.fontSize(18).text("Safari Package Quotation", { align: "center" });
-    doc.moveDown();
+    const agency = getAgency(data);
+    const currency = data?.currency || "KES";
+    const finalTotal =
+      data?.finalTotal ??
+      data?.totalPackagePrice ??
+      data?.total ??
+      data?.calculation?.finalTotal ??
+      0;
 
-    doc.fontSize(12).text(`Client Email: ${to}`);
-    doc.text(`Total Travellers: ${calculation.totalTravellers}`);
-    doc.text(`Total Nights: ${calculation.totalNights}`);
-    doc.moveDown();
+    const pricePerPerson =
+      data?.pricePerPerson ??
+      data?.calculation?.pricePerPerson ??
+      0;
 
-    doc.fontSize(15).text("Client Quotation Summary", { underline: true });
-    doc.moveDown(0.5);
-    doc.fontSize(13).text(`Total Package Price: KES ${money(calculation.finalTotal)}`);
-    doc.text(`Price Per Person: KES ${money(calculation.pricePerPerson)}`);
-    doc.moveDown();
+    const totalTravellers =
+      data?.totalTravellers ??
+      data?.travellers ??
+      data?.calculation?.totalTravellers ??
+      "";
 
-    if (Array.isArray(body.hotels) && body.hotels.length > 0) {
-      doc.fontSize(15).text("Hotels", { underline: true });
-      doc.moveDown(0.5);
-      body.hotels.forEach((hotel, index) => {
-        doc.fontSize(12).text(
-          `${index + 1}. ${hotel.name || "Hotel"} - ${hotel.mealPlan || ""}`
-        );
-      });
-      doc.moveDown();
+    const totalNights =
+      data?.totalNights ??
+      data?.nights ??
+      data?.calculation?.totalNights ??
+      "";
+
+    const tripDays =
+      data?.tripDays ??
+      data?.days ??
+      data?.numberOfDays ??
+      "";
+
+    const theme = agency.themeColor || "#0F4C81";
+    const lightBg = "#F3F7FB";
+    const darkText = "#1F2937";
+    const mutedText = "#6B7280";
+
+    let y = 45;
+
+    drawRoundedRect(doc, 50, y, 495, 85, 14, theme);
+
+    const logoBoxX = 65;
+    const logoBoxY = y + 15;
+
+    doc.roundedRect(logoBoxX, logoBoxY, 58, 58, 10).fill("#FFFFFF");
+
+    const logoAdded = addLogo(doc, agency.logo, logoBoxX + 6, logoBoxY + 6, 46);
+
+    if (!logoAdded) {
+      doc
+        .fontSize(18)
+        .fillColor(theme)
+        .font("Helvetica-Bold")
+        .text("360", logoBoxX + 12, logoBoxY + 20);
     }
 
-    if (Array.isArray(body.activities) && body.activities.length > 0) {
-      doc.fontSize(15).text("Activities", { underline: true });
-      doc.moveDown(0.5);
-      body.activities.forEach((activity, index) => {
-        doc.fontSize(12).text(`${index + 1}. ${activity.name || "Activity"}`);
-      });
-      doc.moveDown();
+    doc
+      .fillColor("#FFFFFF")
+      .font("Helvetica-Bold")
+      .fontSize(22)
+      .text(agency.name, 140, y + 18, { width: 370 });
+
+    const contactLine = [agency.phone, agency.email, agency.website]
+      .filter(Boolean)
+      .join(" | ");
+
+    if (contactLine) {
+      doc
+        .font("Helvetica")
+        .fontSize(9)
+        .fillColor("#FFFFFF")
+        .text(contactLine, 140, y + 48, { width: 370 });
     }
 
-    if (Array.isArray(calculation.includes) && calculation.includes.length > 0) {
-      doc.fontSize(15).text("Includes", { underline: true });
-      doc.moveDown(0.5);
-      calculation.includes.forEach((item) => {
-        doc.fontSize(12).text(`• ${item}`);
-      });
-      doc.moveDown();
+    if (agency.preparedBy) {
+      doc
+        .font("Helvetica")
+        .fontSize(9)
+        .fillColor("#FFFFFF")
+        .text(`Prepared by: ${agency.preparedBy}`, 140, y + 64, {
+          width: 370,
+        });
     }
 
-    if (Array.isArray(calculation.excludes) && calculation.excludes.length > 0) {
-      doc.fontSize(15).text("Excludes", { underline: true });
-      doc.moveDown(0.5);
-      calculation.excludes.forEach((item) => {
-        doc.fontSize(12).text(`• ${item}`);
-      });
-      doc.moveDown();
+    y += 120;
+
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(20)
+      .fillColor(theme)
+      .text("Client Travel Quotation", 50, y);
+
+    y += 38;
+
+    doc
+      .moveTo(50, y)
+      .lineTo(545, y)
+      .strokeColor("#E5E7EB")
+      .stroke();
+
+    y += 22;
+
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(14)
+      .fillColor(darkText)
+      .text("Client Details", 50, y);
+
+    y += 25;
+
+    const leftX = 50;
+    const rightX = 310;
+    const labelW = 120;
+    const valueW = 170;
+
+    function detailRow(label, value, x, rowY) {
+      if (!value && value !== 0) return;
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(10)
+        .fillColor(darkText)
+        .text(label, x, rowY, { width: labelW });
+
+      doc
+        .font("Helvetica")
+        .fontSize(10)
+        .fillColor(darkText)
+        .text(String(value), x + labelW, rowY, { width: valueW });
     }
 
-    doc.fontSize(15).text("Internal Cost Breakdown", { underline: true });
-    doc.moveDown(0.5);
-    doc.fontSize(12).text(`Hotel Total: KES ${money(calculation.hotelTotal)}`);
-    doc.text(`Transport Total: KES ${money(calculation.mainTransportTotal)}`);
-    doc.text(`Park Fees Total: KES ${money(calculation.parkFeesTotal)}`);
-    doc.text(`Activities Total: KES ${money(calculation.activitiesTotal)}`);
-    doc.text(`Meals Total: KES ${money(calculation.mealsTotal)}`);
-    doc.text(`Other Transport Total: KES ${money(calculation.otherTransportTotal)}`);
-    doc.text(`Fuel Total: KES ${money(calculation.fuelTotal)}`);
-    doc.text(`Driver Total: KES ${money(calculation.driverTotal)}`);
-    doc.text(`Markup Amount: KES ${money(calculation.markupAmount)}`);
-    doc.moveDown();
+    const additionalClients = safeArray(data?.otherClients || data?.additionalClients)
+      .map((c) => (typeof c === "string" ? c : c?.name))
+      .filter(Boolean)
+      .join(", ");
 
-    doc.fontSize(10).text("This quotation was prepared using Jambo Trip 360.", {
-      align: "center",
-    });
+    const hotels = safeArray(data?.hotels)
+      .map((h) => {
+        if (typeof h === "string") return h;
+        const hotelName = cleanText(h?.name);
+        const mealPlan = cleanText(h?.mealPlan);
+        return [hotelName, mealPlan].filter(Boolean).join(" - ");
+      })
+      .filter(Boolean)
+      .join(", ");
+
+    detailRow("Client Name", getClientName(data), leftX, y);
+    detailRow("Destination", cleanText(data?.destination || data?.destinations?.[0]?.name), leftX, y + 20);
+    detailRow("Client Type", cleanText(data?.clientType), leftX, y + 40);
+    detailRow("Currency", currency, leftX, y + 60);
+    detailRow("Adults", data?.adults ?? data?.adultCount ?? "", leftX, y + 80);
+    detailRow("Children", data?.children ?? data?.childCount ?? "", leftX, y + 100);
+    detailRow("Total Travellers", totalTravellers, leftX, y + 120);
+
+    detailRow("Trip Days", tripDays, rightX, y);
+    detailRow("Trip Type", cleanText(data?.tripType), rightX, y + 20);
+    detailRow("Additional Clients", additionalClients, rightX, y + 40);
+    detailRow("Hotel(s)", hotels, rightX, y + 60);
+    detailRow("Total Nights", totalNights, rightX, y + 80);
+
+    y += 165;
+
+    drawRoundedRect(doc, 50, y, 495, 78, 12, lightBg);
+
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(14)
+      .fillColor(theme)
+      .text("Package Summary", 70, y + 16);
+
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(11)
+      .fillColor(darkText)
+      .text("Total Package Price", 70, y + 43);
+
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(14)
+      .fillColor(theme)
+      .text(formatMoney(finalTotal, currency), 385, y + 39, {
+        width: 130,
+        align: "right",
+      });
+
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(11)
+      .fillColor(darkText)
+      .text("Price Per Person", 70, y + 62);
+
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(13)
+      .fillColor(theme)
+      .text(formatMoney(pricePerPerson, currency), 385, y + 58, {
+        width: 130,
+        align: "right",
+      });
+
+    y += 110;
+
+    function sectionList(title, items, startY) {
+      let sectionY = startY;
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(14)
+        .fillColor(theme)
+        .text(title, 50, sectionY);
+
+      sectionY += 22;
+
+      const cleanItems = safeArray(items)
+        .map((item) => {
+          if (typeof item === "string") return item;
+          return item?.text || item?.name || "";
+        })
+        .filter(Boolean);
+
+      if (cleanItems.length === 0) {
+        doc
+          .font("Helvetica")
+          .fontSize(10)
+          .fillColor(mutedText)
+          .text("Not specified", 50, sectionY);
+        return sectionY + 20;
+      }
+
+      cleanItems.forEach((item, index) => {
+        doc
+          .font("Helvetica")
+          .fontSize(10)
+          .fillColor(darkText)
+          .text(`${index + 1}. ${item}`, 50, sectionY, { width: 460 });
+        sectionY += 16;
+      });
+
+      return sectionY + 12;
+    }
+
+    y = sectionList(
+      "Includes",
+      data?.includes || data?.calculation?.includes || [],
+      y
+    );
+
+    y = sectionList(
+      "Excludes",
+      data?.excludes || data?.excludeItems || [],
+      y
+    );
+
+    const activities = safeArray(data?.activities)
+      .map((a) => (typeof a === "string" ? a : a?.name))
+      .filter(Boolean);
+
+    if (activities.length > 0) {
+      y = sectionList("Activities", activities, y);
+    }
+
+    if (y > 680) {
+      doc.addPage();
+      y = 60;
+    }
+
+    doc
+      .font("Helvetica")
+      .fontSize(9)
+      .fillColor(mutedText)
+      .text(`Thank you for choosing ${agency.name}.`, 50, 750, {
+        width: 495,
+        align: "center",
+      });
 
     doc.end();
   });
+}
+
+function buildEmailHtml(data) {
+  const agency = getAgency(data);
+  const currency = data?.currency || "KES";
+  const finalTotal =
+    data?.finalTotal ??
+    data?.totalPackagePrice ??
+    data?.total ??
+    data?.calculation?.finalTotal ??
+    0;
+
+  const pricePerPerson =
+    data?.pricePerPerson ??
+    data?.calculation?.pricePerPerson ??
+    0;
+
+  const theme = agency.themeColor || "#0F4C81";
+
+  return `
+    <div style="font-family:Arial,sans-serif;color:#111;line-height:1.6;max-width:640px;margin:auto;">
+      <div style="background:${theme};color:white;padding:22px;border-radius:14px;">
+        <h2 style="margin:0;">${agency.name}</h2>
+        <p style="margin:6px 0 0 0;">Safari Package Quotation</p>
+      </div>
+
+      <div style="padding:20px 0;">
+        <p>Dear ${getClientName(data)},</p>
+        <p>Thank you for your enquiry. Please find your safari package quotation attached as a PDF.</p>
+
+        <div style="background:#f3f7fb;padding:16px;border-radius:12px;margin:18px 0;">
+          <p style="margin:0;"><strong>Total Package Price:</strong> ${formatMoney(finalTotal, currency)}</p>
+          <p style="margin:6px 0 0 0;"><strong>Price Per Person:</strong> ${formatMoney(pricePerPerson, currency)}</p>
+        </div>
+
+        <p>Kind regards,<br/>
+        ${agency.preparedBy ? agency.preparedBy + "<br/>" : ""}
+        <strong>${agency.name}</strong></p>
+      </div>
+    </div>
+  `;
 }
 
 app.get("/", (req, res) => {
   res.send("Jambo Trip 360 backend is running securely");
 });
 
-app.post("/calculate", (req, res) => {
-  try {
-    const calculation = calculatePackage(req.body);
-    res.json(calculation);
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "Calculation failed",
-      error: error.message,
-    });
-  }
+app.get("/health", (req, res) => {
+  res.json({
+    success: true,
+    message: "Backend is healthy",
+    time: new Date().toISOString(),
+  });
 });
 
-app.post("/trial/start", async (req, res) => {
-  try {
-    const name = String(req.body.name || "").trim();
-    const email = normalizeEmail(req.body.email);
-    const phone = normalizePhone(req.body.phone);
+app.post("/trial/start", (req, res) => {
+  const { name, email, phone } = req.body || {};
+  const cleanEmail = normalizeEmail(email);
 
-    if (!name || !email || !email.includes("@") || !/^\+2547\d{8}$/.test(phone)) {
-      return res.status(400).json({
-        success: false,
-        message: "Please enter name, email, and phone number.",
-      });
-    }
+  if (!cleanEmail) {
+    return res.status(400).json({
+      success: false,
+      message: "Email is required.",
+    });
+  }
 
-    const data = readData();
-    const key = userKey(email, phone);
+  const data = readData();
 
-    if (data.licenses[key]?.active) {
-      return res.json({
-        success: true,
-        allowed: true,
-        unlocked: true,
-        message: "Account already activated.",
-      });
-    }
+  if (!data.trials) data.trials = {};
+  if (!data.unlocks) data.unlocks = {};
 
-    if (data.trials[key]) {
-      const trial = data.trials[key];
-      const startedAt = Number(trial.startedAt);
-      const expiresAt = startedAt + TRIAL_HOURS * 60 * 60 * 1000;
-      const now = Date.now();
-
-      if (now > expiresAt) {
-        return res.status(403).json({
-          success: false,
-          allowed: false,
-          expired: true,
-          message: "Trial expired. Please activate your account.",
-        });
-      }
-
-      return res.json({
-        success: true,
-        allowed: true,
-        remainingMs: expiresAt - now,
-        expiresAt,
-        unlocked: false,
-        name: trial.name,
-        email,
-        phone,
-        startedAt,
-        trialHours: TRIAL_HOURS,
-      });
-    }
-
-    const startedAt = Date.now();
-    const expiresAt = startedAt + TRIAL_HOURS * 60 * 60 * 1000;
-
-    data.trials[key] = {
-      name,
-      email,
-      phone,
-      startedAt,
-      expiresAt,
-    };
-
-    saveData(data);
-
-    res.json({
+  if (data.unlocks[cleanEmail]?.unlocked) {
+    return res.json({
       success: true,
-      allowed: true,
-      unlocked: false,
-      name,
-      email,
-      phone,
-      startedAt,
-      expiresAt,
-      trialHours: TRIAL_HOURS,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "Unable to start trial",
-      error: error.message,
+      unlocked: true,
+      trialActive: false,
+      message: "Account already unlocked.",
     });
   }
-});
 
-app.get("/trial/status", (req, res) => {
-  try {
-    const email = normalizeEmail(req.query.email);
-    const phone = normalizePhone(req.query.phone);
+  const existingTrial = data.trials[cleanEmail];
 
-    const data = readData();
-    const key = userKey(email, phone);
+  if (existingTrial) {
+    const expired = isTrialExpired(existingTrial.startedAt);
 
-    if (data.licenses[key]?.active) {
-      return res.json({
-        success: true,
-        allowed: true,
-        unlocked: true,
-        remainingMs: 0,
-        message: "Account active.",
-      });
-    }
-
-    const trial = data.trials[key];
-
-    if (!trial) {
-      return res.json({
-        success: true,
-        allowed: false,
-        unlocked: false,
-        trialStarted: false,
-        remainingMs: 0,
-      });
-    }
-
-    const now = Date.now();
-    const startedAt = Number(trial.startedAt);
-    const expiresAt = startedAt + TRIAL_HOURS * 60 * 60 * 1000;
-    const remainingMs = Math.max(0, expiresAt - now);
-
-    if (remainingMs <= 0) {
-      return res.json({
-        success: true,
-        allowed: false,
-        expired: true,
-        unlocked: false,
-        remainingMs: 0,
-        startedAt,
-        expiresAt,
+    if (expired) {
+      return res.status(403).json({
+        success: false,
+        trialExpired: true,
+        message: "Your 2-hour trial has expired. Please subscribe to continue.",
+        subscriptionAmount: SUBSCRIPTION_AMOUNT,
       });
     }
 
     return res.json({
       success: true,
-      allowed: true,
-      unlocked: false,
-      name: trial.name,
-      email,
-      phone,
-      startedAt,
-      expiresAt,
-      remainingMs,
-      trialHours: TRIAL_HOURS,
+      trialActive: true,
+      startedAt: existingTrial.startedAt,
+      expiresAt: addHours(existingTrial.startedAt, TRIAL_HOURS),
+      message: "Trial already active.",
+    });
+  }
+
+  const startedAt = nowMs();
+
+  data.trials[cleanEmail] = {
+    name: cleanText(name),
+    email: cleanEmail,
+    phone: cleanText(phone),
+    startedAt,
+  };
+
+  writeData(data);
+
+  res.json({
+    success: true,
+    trialActive: true,
+    startedAt,
+    expiresAt: addHours(startedAt, TRIAL_HOURS),
+    message: "Trial started successfully.",
+  });
+});
+
+app.post("/trial/status", (req, res) => {
+  const { email } = req.body || {};
+  const cleanEmail = normalizeEmail(email);
+
+  if (!cleanEmail) {
+    return res.status(400).json({
+      success: false,
+      message: "Email is required.",
+    });
+  }
+
+  const data = readData();
+
+  if (data.unlocks?.[cleanEmail]?.unlocked) {
+    return res.json({
+      success: true,
+      unlocked: true,
+      trialActive: false,
+    });
+  }
+
+  const trial = data.trials?.[cleanEmail];
+
+  if (!trial) {
+    return res.json({
+      success: true,
+      trialActive: false,
+      trialExpired: false,
+    });
+  }
+
+  const expired = isTrialExpired(trial.startedAt);
+
+  res.json({
+    success: true,
+    trialActive: !expired,
+    trialExpired: expired,
+    startedAt: trial.startedAt,
+    expiresAt: addHours(trial.startedAt, TRIAL_HOURS),
+    subscriptionAmount: SUBSCRIPTION_AMOUNT,
+  });
+});
+
+app.post("/unlock", (req, res) => {
+  const { email, code } = req.body || {};
+  const cleanEmail = normalizeEmail(email);
+  const cleanCode = cleanText(code);
+
+  const adminCode = process.env.ADMIN_UNLOCK_CODE || "JAMBO360";
+
+  if (!cleanEmail || !cleanCode) {
+    return res.status(400).json({
+      success: false,
+      message: "Email and unlock code are required.",
+    });
+  }
+
+  if (cleanCode !== adminCode) {
+    return res.status(403).json({
+      success: false,
+      message: "Invalid unlock code.",
+    });
+  }
+
+  const data = readData();
+
+  if (!data.unlocks) data.unlocks = {};
+
+  data.unlocks[cleanEmail] = {
+    unlocked: true,
+    unlockedAt: nowMs(),
+  };
+
+  writeData(data);
+
+  res.json({
+    success: true,
+    unlocked: true,
+    message: "Account unlocked successfully.",
+  });
+});
+
+app.post("/send-quotation", async (req, res) => {
+  try {
+    if (!process.env.RESEND_API_KEY) {
+      throw new Error("Missing RESEND_API_KEY in Render Environment Variables");
+    }
+
+    const data = req.body || {};
+    const clientEmail =
+      cleanText(data.clientEmail) ||
+      cleanText(data.email) ||
+      cleanText(data.to);
+
+    if (!clientEmail) {
+      return res.status(400).json({
+        success: false,
+        message: "Client email is required.",
+      });
+    }
+
+    const agency = getAgency(data);
+    const pdfBuffer = await buildQuotationPdfBuffer(data);
+
+    const fromEmail = process.env.RESEND_FROM_EMAIL || "quotes@jambotrip360.com";
+    const fromName = agency.name || "Travel Quotation";
+
+    const result = await resend.emails.send({
+      from: `${fromName} <${fromEmail}>`,
+      to: [clientEmail],
+      subject: `Your Safari Quotation - ${agency.name}`,
+      html: buildEmailHtml(data),
+      attachments: [
+        {
+          filename: "Safari-Quotation.pdf",
+          content: pdfBuffer,
+        },
+      ],
+    });
+
+    console.log(`Quotation email sent to: ${clientEmail}`);
+
+    res.json({
+      success: true,
+      message: "Quotation email sent successfully.",
+      resendId: result?.data?.id || null,
     });
   } catch (error) {
+    console.error("Send quotation error:", error);
+
     res.status(500).json({
       success: false,
-      message: "Trial check failed",
-      error: error.message,
+      message: error.message || "Failed to send quotation email.",
     });
   }
 });
 
-app.post("/admin/generate-code", async (req, res) => {
+app.post("/test-email", async (req, res) => {
   try {
-    const adminSecret = String(req.headers["x-admin-secret"] || "");
-    const expectedSecret = String(process.env.ADMIN_SECRET || "");
-
-    if (!expectedSecret || adminSecret !== expectedSecret) {
-      return res.status(401).json({
-        success: false,
-        message: "Unauthorized.",
-      });
+    if (!process.env.RESEND_API_KEY) {
+      throw new Error("Missing RESEND_API_KEY in Render Environment Variables");
     }
 
-    const name = String(req.body.name || "Agent").trim();
-    const email = normalizeEmail(req.body.email);
-    const phone = normalizePhone(req.body.phone);
+    const to = cleanText(req.body?.to) || "jambotrip360@gmail.com";
 
-    if (!email || !email.includes("@") || !phone) {
-      return res.status(400).json({
-        success: false,
-        message: "Valid email and +2547 phone are required.",
-      });
-    }
-
-    const data = readData();
-    const key = userKey(email, phone);
-    const code = generateCode(name);
-
-    data.activationCodes[code] = {
-      code,
-      name,
-      email,
-      phone,
-      key,
-      active: true,
-      used: false,
-      createdAt: Date.now(),
-      amount: SUBSCRIPTION_AMOUNT,
-    };
-
-    saveData(data);
-
-    await sendEmail({
-      to: email,
-      subject: "Your Jambo Trip 360 Activation Code",
+    const result = await resend.emails.send({
+      from: `Jambo Trip 360 <${process.env.RESEND_FROM_EMAIL || "quotes@jambotrip360.com"}>`,
+      to: [to],
+      subject: "Jambo Trip 360 Test Email",
       html: `
-        <div style="font-family:Arial,sans-serif;line-height:1.6;color:#111">
-          <h2>Jambo Trip 360 Activation Code</h2>
-          <p>Hello ${name},</p>
-          <p>Your activation code is:</p>
-          <h1 style="color:#0057B8;letter-spacing:1px">${code}</h1>
-          <p>Use this code to unlock your Jambo Trip 360 account.</p>
-          <p><strong>Subscription:</strong> ${SUBSCRIPTION_AMOUNT}</p>
+        <div style="font-family:Arial,sans-serif;">
+          <h2>Jambo Trip 360 Test Email</h2>
+          <p>Your Resend email setup is working.</p>
         </div>
       `,
     });
 
     res.json({
       success: true,
-      emailSent: true,
-      code,
-      name,
-      email,
-      phone,
-      message: "Activation code generated and emailed successfully.",
+      message: "Test email sent successfully.",
+      resendId: result?.data?.id || null,
     });
   } catch (error) {
+    console.error("Test email error:", error);
+
     res.status(500).json({
       success: false,
-      message: "Could not generate activation code.",
-      error: error.message,
+      message: error.message || "Failed to send test email.",
     });
   }
 });
 
-app.post("/activate", (req, res) => {
-  try {
-    const email = normalizeEmail(req.body.email);
-    const phone = normalizePhone(req.body.phone);
-    const code = String(req.body.code || "").trim().toUpperCase();
+const PORT = process.env.PORT || 5000;
 
-    const data = readData();
-    const key = userKey(email, phone);
-    const activation = data.activationCodes[code];
-
-    if (!activation || !activation.active) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid activation code.",
-      });
-    }
-
-    if (activation.used) {
-      return res.status(400).json({
-        success: false,
-        message: "This activation code has already been used.",
-      });
-    }
-
-    if (activation.email !== email || activation.phone !== phone) {
-      return res.status(400).json({
-        success: false,
-        message: "Activation details do not match.",
-      });
-    }
-
-    activation.used = true;
-    activation.usedAt = Date.now();
-
-    data.licenses[key] = {
-      active: true,
-      email,
-      phone,
-      activatedAt: Date.now(),
-      code,
-      amount: SUBSCRIPTION_AMOUNT,
-    };
-
-    data.activationCodes[code] = activation;
-    saveData(data);
-
-    res.json({
-      success: true,
-      unlocked: true,
-      message: "Activation successful.",
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "Activation failed.",
-      error: error.message,
-    });
-  }
-});
-
-app.post("/send-quotation", async (req, res) => {
-  try {
-    const to = normalizeEmail(req.body.to || req.body.clientEmail);
-    const subject = req.body.subject || "Your Safari Quotation - Jambo Trip 360";
-
-    if (!to || !to.includes("@")) {
-      return res.status(400).json({
-        success: false,
-        message: "Valid client email is required.",
-      });
-    }
-
-    const calculation = calculatePackage(req.body);
-    const pdfBuffer = await generateQuotationPDF({
-      to,
-      calculation,
-      body: req.body,
-    });
-
-    const html = `
-      <div style="font-family:Arial,sans-serif;color:#111;line-height:1.6">
-        <h2>Safari Package Quotation</h2>
-        <p>Thank you for your enquiry. Please find your quotation PDF attached.</p>
-        <h3>Total Package Price: KES ${money(calculation.finalTotal)}</h3>
-        <h3>Price Per Person: KES ${money(calculation.pricePerPerson)}</h3>
-        <p>This quotation was prepared using Jambo Trip 360.</p>
-      </div>
-    `;
-
-    await sendEmail({
-      to,
-      subject,
-      html,
-      attachments: [
-        {
-          filename: "Jambo-Trip-360-Quotation.pdf",
-          content: pdfBuffer,
-        },
-      ],
-    });
-
-    console.log("Quotation email with PDF sent to:", to);
-
-    res.json({
-      success: true,
-      message: "Quotation sent successfully with PDF attachment.",
-    });
-  } catch (error) {
-    console.error("Quotation email failed:", error);
-
-    res.status(500).json({
-      success: false,
-      message: "Failed to send quotation.",
-      error: error.message,
-    });
-  }
-});
-
-app.get("/test-email", async (req, res) => {
-  try {
-    await sendEmail({
-      to: "jambotrip360@gmail.com",
-      subject: "Jambo Trip 360 Test Email",
-      html: "<h2>Email is working perfectly ✅</h2><p>Resend is connected successfully.</p>",
-    });
-
-    res.json({
-      success: true,
-      message: "Email is ready.",
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "Email setup failed.",
-      error: error.message,
-    });
-  }
-});
-
-app.listen(PORT, "0.0.0.0", () => {
+app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
