@@ -650,9 +650,11 @@ export default function App() {
       if (data.allowed || data.unlocked) {
         setIsUnlocked(Boolean(data.unlocked));
         setTrialExpired(false);
+        localStorage.setItem("trialStarted", "true");
         setTimeLeft(data.unlocked ? "Unlocked" : formatTimeLeft(data.remainingMs || 0));
       } else {
         setTrialExpired(true);
+        localStorage.removeItem("trialStarted");
         setTimeLeft("00:00:00");
       }
     } catch {
@@ -975,73 +977,98 @@ ${excludesText}
   }
 
   if (trialExpired && !isUnlocked) {
-    return (
-      <div style={pageStyle}>
-        <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 20 }}>
-          <div style={{ ...cardStyle, maxWidth: 620, width: "100%", padding: 32, textAlign: "center" }}>
-            <div
-              style={{
-                display: "inline-block",
-                background: "#FFF1F5",
-                color: "#7B1E3A",
-                padding: "8px 14px",
-                borderRadius: 999,
-                fontWeight: 800,
-                fontSize: 12,
-                marginBottom: 14,
-              }}
-            >
-              TRIAL ENDED
-            </div>
+  return (
+    <div style={pageStyle}>
+      <div
+        style={{
+          minHeight: "100vh",
+          display: "grid",
+          placeItems: "center",
+          padding: 20,
+        }}
+      >
+        <div
+          style={{
+            ...cardStyle,
+            maxWidth: 620,
+            width: "100%",
+            padding: 32,
+            textAlign: "center",
+          }}
+        >
+          <div
+            style={{
+              display: "inline-block",
+              background: "#FFF1F5",
+              color: "#7B1E3A",
+              padding: "8px 14px",
+              borderRadius: 999,
+              fontWeight: 800,
+              fontSize: 12,
+              marginBottom: 14,
+            }}
+          >
+            TRIAL ENDED
+          </div>
 
-            <h1 style={{ marginTop: 0, color: "#0F4C81" }}>Unlock Jambo Trip 360°</h1>
+          <h1 style={{ marginTop: 0, color: "#0F4C81" }}>
+            Unlock Jambo Trip 360°
+          </h1>
 
-            <p style={{ color: "#64748b", lineHeight: 1.7 }}>
-              Your free trial has ended. Subscribe to continue using the quotation system.
+          <p style={{ color: "#64748b", lineHeight: 1.7 }}>
+            Your free trial has ended. Subscribe to continue using the system.
+          </p>
+
+          <div
+            style={{
+              background: "#F8FAFC",
+              border: "1px solid #E2E8F0",
+              borderRadius: 22,
+              padding: 20,
+              marginTop: 18,
+              textAlign: "left",
+            }}
+          >
+            <p style={{ margin: 0, fontWeight: 800, color: "#0F4C81" }}>
+              Subscription: {PAYMENT_AMOUNT}
             </p>
 
-            <div
+            <p style={{ margin: "10px 0 0", color: "#475569" }}>
+              Agent: <strong>{agentInfo.name}</strong>
+            </p>
+
+            <p style={{ margin: "6px 0 0", color: "#475569" }}>
+              Email: <strong>{agentInfo.email}</strong>
+            </p>
+
+            <p style={{ margin: "6px 0 0", color: "#475569" }}>
+              Phone: <strong>{agentInfo.phone}</strong>
+            </p>
+          </div>
+
+          <div style={{ marginTop: 16, textAlign: "left" }}>
+            <label style={labelStyle}>Activation Code</label>
+
+            <input
+              style={inputStyle}
+              placeholder="Example: JAMBO-XXXX"
+              value={activationCode}
+              onChange={(e) => setActivationCode(e.target.value)}
+            />
+
+            <button
               style={{
-                background: "#F8FAFC",
-                border: "1px solid #E2E8F0",
-                borderRadius: 22,
-                padding: 20,
-                marginTop: 18,
-                textAlign: "left",
+                ...primaryButton,
+                width: "100%",
+                marginTop: 10,
+                opacity: activationLoading ? 0.7 : 1,
               }}
+              onClick={activateSubscription}
+              disabled={activationLoading}
             >
-              <p style={{ margin: 0, fontWeight: 800, color: "#0F4C81" }}>
-                Subscription: {PAYMENT_AMOUNT}
-              </p>
-              <p style={{ margin: "10px 0 0", color: "#475569" }}>
-                Agent: <strong>{agentInfo.name}</strong>
-              </p>
-              <p style={{ margin: "6px 0 0", color: "#475569" }}>
-                Email: <strong>{agentInfo.email}</strong>
-              </p>
-              <p style={{ margin: "6px 0 0", color: "#475569" }}>
-                Phone: <strong>{agentInfo.phone}</strong>
-              </p>
-            </div>
-
-            <div style={{ marginTop: 16, textAlign: "left" }}>
-              <label style={labelStyle}>Activation Code</label>
-              <input
-                style={inputStyle}
-                placeholder="Example: JAMBO-JOHN-A8F3K9X"
-                value={activationCode}
-                onChange={(e) => setActivationCode(e.target.value)}
-              />
-
-              <button
-                style={{ ...primaryButton, width: "100%", marginTop: 10, opacity: activationLoading ? 0.7 : 1 }}
-                onClick={activateSubscription}
-                disabled={activationLoading}
-              >
-                {activationLoading ? "Activating..." : "Activate"}
-              </button>
-            </div>
-
+              {activationLoading ? "Activating..." : "Activate"}
+            </button>
+          </div>
             <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap", marginTop: 20 }}>
               {whatsappLink ? (
                 <a href={whatsappLink} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
