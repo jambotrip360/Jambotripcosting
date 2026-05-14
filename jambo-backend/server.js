@@ -656,6 +656,60 @@ app.post("/trial/status", (req, res) => {
   });
 });
 
+app.get("/trial/status", (req, res) => {
+  const email = normalizeEmail(req.query.email || "");
+
+  if (!email) {
+    return res.status(400).json({
+      success: false,
+      message: "Email is required.",
+    });
+  }
+
+  const data = readData();
+
+  if (data.unlocks?.[email]?.unlocked) {
+    return res.json({
+      success: true,
+      unlocked: true,
+      allowed: true,
+      remainingMs: 0,
+    });
+  }
+
+  const trial = data.trials?.[email];
+
+  if (!trial) {
+    return res.json({
+      success: false,
+      allowed: false,
+      remainingMs: 0,
+      message: "No active trial found.",
+    });
+  }
+
+  const expiresAt = addHours(trial.startedAt, TRIAL_HOURS);
+  const remainingMs = Math.max(0, expiresAt - nowMs());
+
+  if (remainingMs <= 0) {
+    return res.json({
+      success: false,
+      allowed: false,
+      remainingMs: 0,
+      message: "Trial expired.",
+    });
+  }
+
+  return res.json({
+    success: true,
+    allowed: true,
+    unlocked: false,
+    remainingMs,
+    startedAt: trial.startedAt,
+    expiresAt,
+  });
+});
+
 app.post("/unlock", (req, res) => {
   const { email, code } = req.body || {};
   const cleanEmail = normalizeEmail(email);
