@@ -647,7 +647,7 @@ export default function App() {
       const data = await response.json();
       setTrialStatus(data);
 
-      if (data.allowed || data.unlocked) {
+      if (data.success && (data.trialActive || data.unlocked)) {
         setIsUnlocked(Boolean(data.unlocked));
         setTrialExpired(false);
         localStorage.setItem("trialStarted", "true");
@@ -694,7 +694,7 @@ export default function App() {
 
       const data = await response.json();
 
-      if (data.allowed || data.unlocked) {
+      if (data.success && (data.trialActive || data.unlocked)) {
         const info = {
   name: agentName.trim(),
   email: agentEmail.trim().toLowerCase(),
