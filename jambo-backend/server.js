@@ -246,8 +246,10 @@ function buildQuotationPdfBuffer(data) {
       data?.numberOfDays ??
       "";
 
-    const theme = agency.themeColor || "#0F4C81";
-    const lightBg = "#F3F7FB";
+    const theme = agency.themePrimary || "#0F4C81";
+const secondary = agency.themeSecondary || "#EAF4FF";
+const accent = agency.themeAccent || "#1D8BFF";
+    const lightBg = secondary;
     const darkText = "#1F2937";
     const mutedText = "#6B7280";
 
@@ -507,7 +509,9 @@ function buildEmailHtml(data) {
     data?.calculation?.pricePerPerson ??
     0;
 
-  const theme = agency.themeColor || "#0F4C81";
+  const theme = agency.themePrimary || "#0F4C81";
+const secondary = agency.themeSecondary || "#EAF4FF";
+const accent = agency.themeAccent || "#1D8BFF";
 
   return `
     <div style="font-family:Arial,sans-serif;color:#111;line-height:1.6;max-width:640px;margin:auto;">
