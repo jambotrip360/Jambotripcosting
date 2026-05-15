@@ -609,6 +609,7 @@ app.post("/trial/start", (req, res) => {
     trialActive: true,
     startedAt,
     expiresAt: addHours(startedAt, TRIAL_HOURS),
+    remainingMs: TRIAL_HOURS * 60 * 60 * 1000,
     message: "Trial started successfully.",
   });
 });
