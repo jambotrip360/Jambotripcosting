@@ -157,7 +157,7 @@ function getAgency(data) {
 
 function getClientName(data) {
   return (
-    cleanText(data?.leadClient) ||
+    cleanText(data?.leadClientName) ||
     cleanText(data?.clientName) ||
     cleanText(data?.clientEmail) ||
     "Client"
@@ -484,7 +484,7 @@ const accent = agency.themeAccent || "#1D8BFF";
     doc
       .font("Helvetica")
       .fontSize(9)
-      .fillColor(mutedText)
+      .fillColor(theme)
       .text(`Thank you for choosing ${agency.name}.`, 50, 750, {
         width: 495,
         align: "center",
