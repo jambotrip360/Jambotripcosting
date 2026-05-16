@@ -374,18 +374,28 @@ const accent = agency.themeAccent || "#1D8BFF";
       .filter(Boolean)
       .join(", ");
 
-    detailRow("Client Name", getClientName(data), leftX, y);
-    detailRow("Destination", cleanText(data?.destination || data?.destinations?.[0]?.name || ""), leftX, y + 20);
-    detailRow("Client Type", cleanText(data?.clientType), leftX, y + 40);
-    detailRow("Currency", currency, leftX, y + 60);
-    detailRow("Adults", data?.adults ?? data?.adultCount ?? "", leftX, y + 80);
-    detailRow("Children", data?.children ?? data?.childCount ?? "", leftX, y + 100);
-    detailRow("Total Travellers", totalTravellers, leftX, y + 120);
-    detailRow("Trip Days", tripDays, leftX, y + 140);
-    detailRow("Trip Type", cleanText(data?.tripType), leftX, y + 160);
-    detailRow("Additional Clients", additionalClients, leftX, y + 180);
-    detailRow("Hotel(s)", hotels, leftX, y + 200);
-    detailRow("Total Nights", totalNights, leftX, y + 220);
+    const details = [
+  ["Client Name", getClientName(data)],
+  ["Destination", cleanText(data?.destination || data?.destinations?.[0]?.name || "")],
+  ["Client Type", cleanText(data?.clientType)],
+  ["Currency", currency],
+  ["Adults", data?.adults ?? data?.adultCount ?? ""],
+  ["Children", data?.children ?? data?.childCount ?? ""],
+  ["Total Travellers", totalTravellers],
+  ["Trip Days", tripDays],
+  ["Trip Type", cleanText(data?.tripType)],
+  ["Additional Clients", additionalClients],
+  ["Hotel(s)", hotels],
+  ["Total Nights", totalNights],
+];
+
+details
+  .filter(([, value]) => value && String(value).trim() !== "")
+  .forEach(([label, value], index) => {
+    detailRow(label, value, leftX, y + index * 20);
+  });
+
+y += details.filter(([, value]) => value && String(value).trim() !== "").length * 20 + 20;
     y += 260;
 
     drawRoundedRect(doc, 50, y, 495, 78, 12, lightBg);
