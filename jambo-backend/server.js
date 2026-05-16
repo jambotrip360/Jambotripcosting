@@ -375,18 +375,17 @@ const accent = agency.themeAccent || "#1D8BFF";
       .join(", ");
 
     detailRow("Client Name", getClientName(data), leftX, y);
-    detailRow("Destination", cleanText(data?.destination || data?.destinations?.[0]?.name), leftX, y + 20);
+    detailRow("Destination", cleanText(data?.destination || data?.destinations?.[0]?.name || ""), leftX, y + 20);
     detailRow("Client Type", cleanText(data?.clientType), leftX, y + 40);
     detailRow("Currency", currency, leftX, y + 60);
     detailRow("Adults", data?.adults ?? data?.adultCount ?? "", leftX, y + 80);
     detailRow("Children", data?.children ?? data?.childCount ?? "", leftX, y + 100);
     detailRow("Total Travellers", totalTravellers, leftX, y + 120);
-    detailRow("Trip Days", tripDays, leftX, y);
-    detailRow("Trip Type", cleanText(data?.tripType), leftX, y + 20);
-    detailRow("Additional Clients", additionalClients, leftX, y + 40);
-    detailRow("Hotel(s)", hotels, leftX, y + 60);
-    detailRow("Total Nights", totalNights, leftX, y + 80);
-
+    detailRow("Trip Days", tripDays, leftX, y + 140);
+    detailRow("Trip Type", cleanText(data?.tripType), leftX, y + 160);
+    detailRow("Additional Clients", additionalClients, leftX, y + 180);
+    detailRow("Hotel(s)", hotels, leftX, y + 200);
+    detailRow("Total Nights", totalNights, leftX, y + 220);
     y += 260;
 
     drawRoundedRect(doc, 50, y, 495, 78, 12, lightBg);
