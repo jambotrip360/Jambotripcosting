@@ -381,14 +381,13 @@ const accent = agency.themeAccent || "#1D8BFF";
     detailRow("Adults", data?.adults ?? data?.adultCount ?? "", leftX, y + 80);
     detailRow("Children", data?.children ?? data?.childCount ?? "", leftX, y + 100);
     detailRow("Total Travellers", totalTravellers, leftX, y + 120);
+    detailRow("Trip Days", tripDays, leftX, y);
+    detailRow("Trip Type", cleanText(data?.tripType), leftX, y + 20);
+    detailRow("Additional Clients", additionalClients, leftX, y + 40);
+    detailRow("Hotel(s)", hotels, leftX, y + 60);
+    detailRow("Total Nights", totalNights, leftX, y + 80);
 
-    detailRow("Trip Days", tripDays, rightX, y);
-    detailRow("Trip Type", cleanText(data?.tripType), rightX, y + 20);
-    detailRow("Additional Clients", additionalClients, rightX, y + 40);
-    detailRow("Hotel(s)", hotels, rightX, y + 60);
-    detailRow("Total Nights", totalNights, rightX, y + 80);
-
-    y += 165;
+    y += 260;
 
     drawRoundedRect(doc, 50, y, 495, 78, 12, lightBg);
 
