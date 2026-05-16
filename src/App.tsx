@@ -191,6 +191,7 @@ export default function App() {
 
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [activationCode, setActivationCode] = useState("");
+  const [showActivationCode, setShowActivationCode] = useState(false);
   const [activationLoading, setActivationLoading] = useState(false);
 
   const [companyName, setCompanyName] = useState("Jambo Trip 360");
@@ -1053,12 +1054,36 @@ ${excludesText}
           <div style={{ marginTop: 16, textAlign: "left" }}>
             <label style={labelStyle}>Activation Code</label>
 
-            <input
-              style={inputStyle}
-              placeholder="Example: JAMBO-XXXX"
-              value={activationCode}
-              onChange={(e) => setActivationCode(e.target.value)}
-            />
+            <div style={{ position: "relative" }}>
+<input
+    type={showActivationCode ? "text" : "password"}
+    style={{
+      ...inputStyle,
+      paddingRight: 70,
+    }}
+    placeholder="Example: JAMBO-XXXX"
+    value={activationCode}
+    onChange={(e) => setActivationCode(e.target.value)}
+  />
+
+  <button
+    type="button"
+    onClick={() => setShowActivationCode(!showActivationCode)}
+    style={{
+      position: "absolute",
+      right: 12,
+      top: "50%",
+      transform: "translateY(-50%)",
+      border: "none",
+      background: "transparent",
+      color: "#2563EB",
+      cursor: "pointer",
+      fontWeight: 600,
+    }}
+  >
+    {showActivationCode ? "Hide" : "Show"}
+  </button>
+</div>
 
             <button
               style={{
