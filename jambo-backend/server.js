@@ -151,7 +151,20 @@ function getAgency(data) {
       cleanText(data?.preparedBy) ||
       cleanText(data?.agentName) ||
       "",
-    themeColor: getThemeColor(data),
+    themePrimary:
+  data?.themePrimary ||
+  branding.themePrimary ||
+  "#0F4C81",
+
+themeSecondary:
+  data?.themeSecondary ||
+  branding.themeSecondary ||
+  "#EAF4FF",
+
+themeAccent:
+  data?.themeAccent ||
+  branding.themeAccent ||
+  "#1D8BFF",
   };
 }
 
