@@ -395,7 +395,7 @@ details
     detailRow(label, value, leftX, y + index * 20);
   });
 
-y += details.filter(([, value]) => value && String(value).trim() !== "").length * 20 + 20;
+y += 120;
     y += 260;
 
     drawRoundedRect(doc, 50, y, 495, 78, 12, lightBg);
