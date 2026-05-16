@@ -208,7 +208,7 @@ export default function App() {
   const [tripType, setTripType] = useState<TripType>("Safari");
   const [customTripType, setCustomTripType] = useState("");
   const [currencyMode, setCurrencyMode] = useState<CurrencyMode>("KES");
-  const [clientType, setClientType] = useState("Resident");
+  const [clientType, setClientType] = useState<CurrencyMode>("KES");
 
   const [otherClients, setOtherClients] = useState<ClientItem[]>([]);
   const [destinations, setDestinations] = useState<DestinationItem[]>([createDestination()]);
@@ -251,7 +251,8 @@ export default function App() {
   const isDayTrip = tripType === "Day Trip";
   const displayTripType = tripType === "Others" && customTripType.trim() ? customTripType.trim() : tripType;
 
-  const displayCurrency: CurrencyMode = calculation.currencyMode || clientType;
+  const displayCurrency: CurrencyMode =
+  clientType === "USD" ? "USD" : "KES";
   const displayFinalTotal = calculation.displayFinalTotal ?? calculation.finalTotal;
   const displayPricePerPerson = calculation.displayPricePerPerson ?? calculation.pricePerPerson;
 
