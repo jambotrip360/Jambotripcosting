@@ -734,7 +734,7 @@ export default function App() {
     try {
       setActivationLoading(true);
 
-      const response = await fetch(`${API_BASE}/activate`, {
+      const response = await fetch(`${API_BASE}/unlock`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
