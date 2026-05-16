@@ -207,7 +207,8 @@ export default function App() {
   const [children, setChildren] = useState("0");
   const [tripType, setTripType] = useState<TripType>("Safari");
   const [customTripType, setCustomTripType] = useState("");
-  const [clientType, setClientType] = useState<CurrencyMode>("KES");
+  const [currencyMode, setCurrencyMode] = useState<CurrencyMode>("KES");
+  const [clientType, setClientType] = useState("Resident");
 
   const [otherClients, setOtherClients] = useState<ClientItem[]>([]);
   const [destinations, setDestinations] = useState<DestinationItem[]>([createDestination()]);
