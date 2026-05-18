@@ -396,7 +396,6 @@ details
   });
 
 y += 120;
-    y += 260;
 
     drawRoundedRect(doc, 50, y, 495, 78, 12, lightBg);
 
@@ -462,7 +461,7 @@ y += 120;
           .fontSize(10)
           .fillColor(mutedText)
           .text("Not specified", 50, sectionY);
-        return sectionY + 20;
+        return sectionY;
       }
 
       cleanItems.forEach((item, index) => {
@@ -471,23 +470,23 @@ y += 120;
           .fontSize(10)
           .fillColor(darkText)
           .text(`${index + 1}. ${item}`, 50, sectionY, { width: 460 });
-        sectionY += 16;
+        sectionY += 12;
       });
 
-      return sectionY + 12;
+      return sectionY;
     }
 
     y = sectionList(
-      "Includes",
-      data?.includes || data?.calculation?.includes || [],
-      y
-    );
+  "Includes",
+  data?.includes || data?.calculation?.includes || [],
+  y + 18
+);
 
     y = sectionList(
-      "Excludes",
-      data?.excludes || data?.excludeItems || [],
-      y
-    );
+  "Excludes",
+  data?.excludes || data?.excludeItems || [],
+  y + 18
+);
 
     const activities = safeArray(data?.activities)
       .map((a) => (typeof a === "string" ? a : a?.name))
