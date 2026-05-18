@@ -395,7 +395,7 @@ details
     detailRow(label, value, leftX, y + index * 20);
   });
 
-y += 120;
+y += 180;
 
     drawRoundedRect(doc, 50, y, 495, 78, 12, lightBg);
 
@@ -469,8 +469,8 @@ y += 120;
           .font("Helvetica")
           .fontSize(10)
           .fillColor(darkText)
-          .text(`${index + 1}. ${item}`, 50, sectionY, { width: 460 });
-        sectionY += 12;
+          .text(`${index + 1}. ${item}`, 50, sectionY, { width: 500 });
+        sectionY += 18;
       });
 
       return sectionY;
@@ -505,8 +505,8 @@ y += 120;
       .font("Helvetica")
       .fontSize(9)
       .fillColor(theme)
-      .text(`Thank you for choosing ${agency.name}.`, 50, 750, {
-        width: 495,
+      .text(`Thank you for choosing ${agency.name}.`, 50, 760, {
+        width: 500,
         align: "center",
       });
 
