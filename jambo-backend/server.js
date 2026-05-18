@@ -496,11 +496,6 @@ y += 180;
       y = sectionList("Activities", activities, y);
     }
 
-    if (y > 680) {
-      doc.addPage();
-      y = 60;
-    }
-
     const footerY = doc.page.height - 50;
 
 doc
