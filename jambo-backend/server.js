@@ -501,15 +501,21 @@ y += 180;
       y = 60;
     }
 
-    doc
-      .font("Helvetica")
-      .fontSize(9)
-      .fillColor(theme)
-      .text(`Thank you for choosing ${agency.name}.`, 50, 760, {
-        width: 500,
-        align: "center",
-      });
+    const footerY = doc.page.height - 50;
 
+doc
+  .font("Helvetica")
+  .fontSize(9)
+  .fillColor(theme)
+  .text(
+    `Thank you for choosing ${agency.name}.`,
+    50,
+    footerY,
+    {
+      width: 500,
+      align: "center",
+    }
+  );
     doc.end();
   });
 }
