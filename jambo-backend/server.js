@@ -496,7 +496,7 @@ y += 180;
       y = sectionList("Activities", activities, y);
     }
 
-    const footerY = doc.page.height - 50;
+    const footerY = 700;
 
 doc
   .font("Helvetica")
