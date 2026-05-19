@@ -498,7 +498,7 @@ y += 180;
 
     let footerY = Math.max(y + 30, 730);
 
-if (footerY > 760) {
+if (footerY > 730) {
   doc.addPage();
   footerY = 60;
 }
