@@ -494,29 +494,22 @@ y += 180;
 
     if (activities.length > 0) {
       y = sectionList("Activities", activities, y);
+      y += 40;
     }
 
-    let footerY = Math.max(y + 30, 730);
-
-if (footerY > 730) {
-  doc.addPage();
-  footerY = 60;
-}
-
-doc
-  .font("Helvetica")
+doc.font("Helvetica")
   .fontSize(9)
-  .fillColor(theme)
-  .text(
-    `Thank you for choosing ${agency.name}.`,
-    50,
-    footerY,
-    {
-      width: 500,
-      align: "center",
-    }
-  );
-    doc.end();
+  .fillColor(theme);
+
+doc.text(
+  `Thank you for choosing ${agency.name}.`,
+  50,
+  doc.page.height - 40,
+  {
+    width: 500,
+    align: "center",
+  }
+);    doc.end();
   });
 }
 
