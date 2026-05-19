@@ -470,10 +470,10 @@ y += 180;
           .fontSize(10)
           .fillColor(darkText)
           .text(`${index + 1}. ${item}`, 50, sectionY, { width: 500 });
-        sectionY += 18;
+        sectionY += 24;
       });
 
-      return sectionY;
+      return sectionY + 20;
     }
 
     y = sectionList(
