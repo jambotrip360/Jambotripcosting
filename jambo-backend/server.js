@@ -497,19 +497,30 @@ y += 180;
       y += 40;
     }
 
-doc.font("Helvetica")
-  .fontSize(9)
-  .fillColor(theme);
+doc.x = 50;
+doc.y = 700;
+
+doc.save();
+
+doc.font("Helvetica");
+doc.fontSize(9);
+doc.fillColor(theme);
 
 doc.text(
   `Thank you for choosing ${agency.name}.`,
   50,
-  doc.page.height - 40,
+  760,
   {
     width: 500,
     align: "center",
+    lineBreak: false,
   }
-);    doc.end();
+);
+
+doc.restore();
+
+doc.end();
+
   });
 }
 
