@@ -496,7 +496,12 @@ y += 180;
       y = sectionList("Activities", activities, y);
     }
 
-    const footerY = 700;
+    let footerY = Math.max(y + 30, 730);
+
+if (footerY > 760) {
+  doc.addPage();
+  footerY = 60;
+}
 
 doc
   .font("Helvetica")
