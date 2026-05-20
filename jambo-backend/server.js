@@ -69,6 +69,14 @@ function normalizeEmail(email = "") {
   return String(email).trim().toLowerCase();
 }
 
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function isValidKenyaPhone(phone) {
+  return /^\+2547\d{8}$/.test(phone);
+}
+
 function nowMs() {
   return Date.now();
 }
@@ -538,7 +546,24 @@ app.get("/health", (req, res) => {
 
 app.post("/trial/start", (req, res) => {
   const { name, email, phone } = req.body || {};
+
   const cleanEmail = normalizeEmail(email);
+
+  // EMAIL VALIDATION
+  if (!isValidEmail(cleanEmail)) {
+    return res.status(400).json({
+      success: false,
+      message: "Please enter a valid email address.",
+    });
+  }
+
+  // PHONE VALIDATION
+  if (!isValidKenyaPhone(phone)) {
+    return res.status(400).json({
+      success: false,
+      message: "Phone must be in format +2547XXXXXXXX",
+    });
+  }
 
   if (!cleanEmail) {
     return res.status(400).json({
