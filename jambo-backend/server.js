@@ -215,312 +215,259 @@ function addLogo(doc, logoData, x, y, size) {
 
 function buildQuotationPdfBuffer(data) {
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({
-      size: "A4",
-      margin: 50,
-      bufferPages: true,
-    });
-
-    const chunks = [];
-
-    doc.on("data", (chunk) => chunks.push(chunk));
-    doc.on("end", () => resolve(Buffer.concat(chunks)));
-    doc.on("error", reject);
-
-    const agency = getAgency(data);
-    const currency = data?.currency || "KES";
-    const finalTotal =
-      data?.finalTotal ??
-      data?.totalPackagePrice ??
-      data?.total ??
-      data?.calculation?.finalTotal ??
-      0;
-
-    const pricePerPerson =
-      data?.pricePerPerson ??
-      data?.calculation?.pricePerPerson ??
-      0;
-
-    const totalTravellers =
-      data?.totalTravellers ??
-      data?.travellers ??
-      data?.calculation?.totalTravellers ??
-      "";
-
-    const totalNights =
-      data?.totalNights ??
-      data?.nights ??
-      data?.calculation?.totalNights ??
-      "";
-
-    const tripDays =
-      data?.tripDays ??
-      data?.days ??
-      data?.numberOfDays ??
-      "";
-
-    const theme = agency.themePrimary || "#0F4C81";
-const secondary = agency.themeSecondary || "#EAF4FF";
-const accent = agency.themeAccent || "#1D8BFF";
-    const lightBg = secondary;
-    const darkText = "#1F2937";
-    const mutedText = "#6B7280";
-
-    let y = 45;
-
-    drawRoundedRect(doc, 50, y, 495, 85, 14, theme);
-
-    const logoBoxX = 65;
-    const logoBoxY = y + 15;
-
-    doc.roundedRect(logoBoxX, logoBoxY, 58, 58, 10).fill("#FFFFFF");
-
-    const logoAdded = addLogo(doc, agency.logo, logoBoxX + 6, logoBoxY + 6, 46);
-
-    if (!logoAdded) {
-      doc
-        .fontSize(18)
-        .fillColor(theme)
-        .font("Helvetica-Bold")
-        .text("360", logoBoxX + 12, logoBoxY + 20);
-    }
-
-    doc
-      .fillColor("#FFFFFF")
-      .font("Helvetica-Bold")
-      .fontSize(22)
-      .text(agency.name, 140, y + 18, { width: 370 });
-
-    const contactLine = [agency.phone, agency.email, agency.website]
-      .filter(Boolean)
-      .join(" | ");
-
-    if (contactLine) {
-      doc
-        .font("Helvetica")
-        .fontSize(9)
-        .fillColor("#FFFFFF")
-        .text(contactLine, 140, y + 48, { width: 370 });
-    }
-
-    if (agency.preparedBy) {
-      doc
-        .font("Helvetica")
-        .fontSize(9)
-        .fillColor("#FFFFFF")
-        .text(`Prepared by: ${agency.preparedBy}`, 140, y + 64, {
-          width: 370,
-        });
-    }
-
-    y += 120;
-
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(20)
-      .fillColor(theme)
-      .text("Client Travel Quotation", 50, y);
-
-    y += 38;
-
-    doc
-      .moveTo(50, y)
-      .lineTo(545, y)
-      .strokeColor("#E5E7EB")
-      .stroke();
-
-    y += 22;
-
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(14)
-      .fillColor(darkText)
-      .text("Client Details", 50, y);
-
-    y += 25;
-
-    const leftX = 50;
-    const rightX = 310;
-    const labelW = 120;
-    const valueW = 170;
-
-    function detailRow(label, value, x, rowY) {
-      if (!value && value !== 0) return;
-      doc
-        .font("Helvetica-Bold")
-        .fontSize(10)
-        .fillColor(darkText)
-        .text(label, x, rowY, { width: labelW });
-
-      doc
-        .font("Helvetica")
-        .fontSize(10)
-        .fillColor(darkText)
-        .text(String(value), x + labelW, rowY, { width: valueW });
-    }
-
-    const additionalClients = safeArray(data?.otherClients || data?.additionalClients)
-      .map((c) => (typeof c === "string" ? c : c?.name))
-      .filter(Boolean)
-      .join(", ");
-
-    const hotels = safeArray(data?.hotels)
-      .map((h) => {
-        if (typeof h === "string") return h;
-        const hotelName = cleanText(h?.name);
-        const mealPlan = cleanText(h?.mealPlan);
-        return [hotelName, mealPlan].filter(Boolean).join(" - ");
-      })
-      .filter(Boolean)
-      .join(", ");
-
-    const details = [
-  ["Client Name", getClientName(data)],
-  ["Destination", cleanText(data?.destination || data?.destinations?.[0]?.name || "")],
-  ["Client Type", cleanText(data?.clientType)],
-  ["Currency", currency],
-  ["Adults", data?.adults ?? data?.adultCount ?? ""],
-  ["Children", data?.children ?? data?.childCount ?? ""],
-  ["Total Travellers", totalTravellers],
-  ["Trip Days", tripDays],
-  ["Trip Type", cleanText(data?.tripType)],
-  ["Additional Clients", additionalClients],
-  ["Hotel(s)", hotels],
-  ["Total Nights", totalNights],
-];
-
-details
-  .filter(([, value]) => value && String(value).trim() !== "")
-  .forEach(([label, value], index) => {
-    detailRow(label, value, leftX, y + index * 20);
-  });
-
-y += 180;
-
-    drawRoundedRect(doc, 50, y, 495, 78, 12, lightBg);
-
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(14)
-      .fillColor(theme)
-      .text("Package Summary", 70, y + 16);
-
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(11)
-      .fillColor(darkText)
-      .text("Total Package Price", 70, y + 43);
-
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(14)
-      .fillColor(theme)
-      .text(formatMoney(finalTotal, currency), 385, y + 39, {
-        width: 130,
-        align: "right",
+    try {
+      const doc = new PDFDocument({
+        size: "A4",
+        margin: 36,
       });
 
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(11)
-      .fillColor(darkText)
-      .text("Price Per Person", 70, y + 62);
+      const chunks = [];
 
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(13)
-      .fillColor(theme)
-      .text(formatMoney(pricePerPerson, currency), 385, y + 58, {
-        width: 130,
-        align: "right",
-      });
+      doc.on("data", (chunk) => chunks.push(chunk));
+      doc.on("end", () => resolve(Buffer.concat(chunks)));
+      doc.on("error", reject);
 
-    y += 110;
+      const agency = getAgency(data);
 
-    function sectionList(title, items, startY) {
-      let sectionY = startY;
+      const calculation =
+        data.calculation && typeof data.calculation === "object"
+          ? data.calculation
+          : {};
 
-      doc
-        .font("Helvetica-Bold")
-        .fontSize(14)
-        .fillColor(theme)
-        .text(title, 50, sectionY);
+      const currency =
+        data.currency ||
+        calculation.currencyMode ||
+        "KES";
 
-      sectionY += 22;
+      const finalTotal =
+        calculation.displayFinalTotal ??
+        calculation.finalTotal ??
+        data.finalTotal ??
+        0;
 
-      const cleanItems = safeArray(items)
-        .map((item) => {
-          if (typeof item === "string") return item;
-          return item?.text || item?.name || "";
-        })
-        .filter(Boolean);
+      const pricePerPerson =
+        calculation.displayPricePerPerson ??
+        calculation.pricePerPerson ??
+        data.pricePerPerson ??
+        0;
 
-      if (cleanItems.length === 0) {
+      const totalTravellers =
+        calculation.totalTravellers ??
+        data.totalTravellers ??
+        "";
+
+      const totalNights =
+        calculation.totalNights ??
+        data.totalNights ??
+        "";
+
+      const theme = agency.themePrimary || "#0F4C81";
+      const secondary = agency.themeSecondary || "#EAF4FF";
+
+      const usableWidth = doc.page.width - 72;
+
+      doc.roundedRect(36, 28, usableWidth, 90, 16).fill(theme);
+
+      doc.roundedRect(48, 42, 74, 62, 10).fill("#ffffff");
+
+      const logoAdded = addLogo(doc, agency.logo, 53, 47, 58);
+
+      if (!logoAdded) {
         doc
-          .font("Helvetica")
+          .font("Helvetica-Bold")
           .fontSize(10)
-          .fillColor(mutedText)
-          .text("Not specified", 50, sectionY);
-        return sectionY;
+          .fillColor(theme)
+          .text("Logo", 72, 66);
       }
 
-      cleanItems.forEach((item, index) => {
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(22)
+        .fillColor("#ffffff")
+        .text(agency.name, 138, 44);
+
+      doc
+        .font("Helvetica")
+        .fontSize(10)
+        .fillColor("#ffffff")
+        .text(
+          `${agency.phone} | ${agency.email} | ${agency.website}`,
+          138,
+          72,
+          { width: 370 }
+        );
+
+      doc
+        .font("Helvetica")
+        .fontSize(10)
+        .fillColor("#ffffff")
+        .text(`Prepared by: ${agency.preparedBy}`, 138, 88);
+
+      let y = 145;
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(19)
+        .fillColor(theme)
+        .text("Client Travel Quotation", 36, y);
+
+      y += 32;
+
+      const hotelText = safeArray(data.hotels)
+        .map((hotel) => {
+          if (typeof hotel === "string") return hotel;
+          return hotel?.name || "";
+        })
+        .filter(Boolean)
+        .join(", ");
+
+      const details = [
+        ["Client Name", getClientName(data)],
+        ["Destination", safeJoin(data.destinations)],
+        ["Trip Type", cleanText(data.tripType)],
+        ["Client Type", currency === "USD" ? "Non-Resident" : "Resident"],
+        ["Currency", currency],
+        ["Adults", String(data.adults || 0)],
+        ["Children", String(data.children || 0)],
+        ["Total Travellers", String(totalTravellers)],
+        ["Additional Clients", safeJoin(data.otherClients)],
+      ];
+
+      if (hotelText) {
+        details.push(["Hotel(s)", hotelText]);
+      }
+
+      if (totalNights) {
+        details.push(["Total Nights", String(totalNights)]);
+      }
+
+      details.forEach(([label, value]) => {
+        doc
+          .font("Helvetica-Bold")
+          .fontSize(10)
+          .fillColor("#334155")
+          .text(label, 36, y, {
+            width: 140,
+          });
+
         doc
           .font("Helvetica")
           .fontSize(10)
-          .fillColor(darkText)
-          .text(`${index + 1}. ${item}`, 50, sectionY, { width: 500 });
-        sectionY += 24;
+          .fillColor("#334155")
+          .text(value, 165, y, {
+            width: 350,
+          });
+
+        y += 20;
       });
 
-      return sectionY + 20;
+      y += 20;
+
+      doc.roundedRect(36, y, usableWidth, 100, 14).fill(secondary);
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(16)
+        .fillColor(theme)
+        .text("Package Summary", 52, y + 16);
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(12)
+        .fillColor("#334155")
+        .text("Total Package Price", 52, y + 50);
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(15)
+        .fillColor(theme)
+        .text(formatMoney(finalTotal, currency), 320, y + 48, {
+          width: 160,
+          align: "right",
+        });
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(12)
+        .fillColor("#334155")
+        .text("Price Per Person", 52, y + 74);
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(15)
+        .fillColor(theme)
+        .text(formatMoney(pricePerPerson, currency), 320, y + 72, {
+          width: 160,
+          align: "right",
+        });
+
+      y += 130;
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(15)
+        .fillColor(theme)
+        .text("Includes", 36, y);
+
+      y += 24;
+
+      const includes = safeArray(
+        calculation.includes || data.includes
+      ).filter(Boolean);
+
+      (includes.length ? includes : ["Transport"]).forEach((item) => {
+        doc
+          .font("Helvetica")
+          .fontSize(11)
+          .fillColor("#334155")
+          .text(`• ${item}`, 46, y);
+
+        y += 18;
+      });
+
+      y += 14;
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(15)
+        .fillColor(theme)
+        .text("Excludes", 36, y);
+
+      y += 24;
+
+      const excludes = safeArray(data.excludes).filter(Boolean);
+
+      (excludes.length
+        ? excludes
+        : ["Anything not mentioned above"]
+      ).forEach((item) => {
+        doc
+          .font("Helvetica")
+          .fontSize(11)
+          .fillColor("#334155")
+          .text(`• ${item}`, 46, y);
+
+        y += 18;
+      });
+
+      doc
+        .font("Helvetica")
+        .fontSize(10)
+        .fillColor(theme)
+        .text(
+          `Thank you for choosing ${agency.name}.`,
+          36,
+          760,
+          {
+            width: usableWidth,
+            align: "center",
+          }
+        );
+
+      doc.end();
+    } catch (error) {
+      reject(error);
     }
-
-    y = sectionList(
-  "Includes",
-  data?.includes || data?.calculation?.includes || [],
-  y + 18
-);
-
-    y = sectionList(
-  "Excludes",
-  data?.excludes || data?.excludeItems || [],
-  y + 18
-);
-
-    const activities = safeArray(data?.activities)
-      .map((a) => (typeof a === "string" ? a : a?.name))
-      .filter(Boolean);
-
-    if (activities.length > 0) {
-      y = sectionList("Activities", activities, y);
-      y += 40;
-    }
-
-doc.x = 50;
-doc.y = 700;
-
-doc.save();
-
-doc.font("Helvetica");
-doc.fontSize(9);
-doc.fillColor(theme);
-
-doc.text(
-  `Thank you for choosing ${agency.name}.`,
-  50,
-  760,
-  {
-    width: 500,
-    align: "center",
-    lineBreak: false,
-  }
-);
-
-doc.restore();
-
-doc.end();
-
   });
 }
 
