@@ -106,6 +106,16 @@ function safeArray(value) {
   return Array.isArray(value) ? value : [];
 }
 
+function safeJoin(values) {
+  return safeArray(values)
+    .map((v) => {
+      if (typeof v === "string") return v.trim();
+      return String(v?.name || "").trim();
+    })
+    .filter(Boolean)
+    .join(", ");
+}
+
 function getThemeColor(data) {
   return (
     data?.agencyBranding?.themeColor ||
