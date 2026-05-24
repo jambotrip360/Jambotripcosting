@@ -728,7 +728,7 @@ app.get("/trial/status", (req, res) => {
 });
 
 app.post("/unlock", (req, res) => {
-  const { email, code } = req.body || {};
+  const { email, code, phone } = req.body || {};
   const cleanEmail = normalizeEmail(email);
   const cleanCode = cleanText(code);
 
@@ -749,13 +749,25 @@ app.post("/unlock", (req, res) => {
   }
 
   const data = readData();
+  const alreadyUnlockedByPhone = Object.values(data.unlocks || {}).find(
+  (unlock) => unlock.phone === cleanText(phone)
+);
+
+if (alreadyUnlockedByPhone?.unlocked) {
+  return res.status(403).json({
+    success: false,
+    message:
+      "This phone number already has a premium account.",
+  });
+}
 
   if (!data.unlocks) data.unlocks = {};
 
   data.unlocks[cleanEmail] = {
-    unlocked: true,
-    unlockedAt: nowMs(),
-  };
+  unlocked: true,
+  phone: cleanText(phone),
+  unlockedAt: nowMs(),
+};
 
   writeData(data);
 

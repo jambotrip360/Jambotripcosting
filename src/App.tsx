@@ -1,3 +1,5 @@
+import PhoneInput from "react-phone-input-2";
+import "react-phone-input-2/lib/style.css";
 import React, { ChangeEvent, useEffect, useMemo, useState } from "react";
 import "./App.css";
 
@@ -670,6 +672,15 @@ export default function App() {
   };
 
   const startTrial = async () => {
+  const alreadyUsedDevice =
+  localStorage.getItem("JT360_DEVICE_TRIAL_USED");
+
+if (alreadyUsedDevice) {
+  setTrialError(
+    "This device has already used a free trial."
+  );
+  return;
+}  
     if (
   !agentName.trim() ||
   !agentEmail.trim() ||
@@ -703,11 +714,12 @@ export default function App() {
         const info = {
   name: agentName.trim(),
   email: agentEmail.trim().toLowerCase(),
-  phone: agentPhone.trim(),
+  phone: `+${agentPhone}`.trim(),
 };
         localStorage.setItem(AGENT_STORAGE_KEY, JSON.stringify(info));
         localStorage.setItem(TRIAL_EMAIL_KEY, cleanEmail);
         localStorage.setItem(TRIAL_PHONE_KEY, cleanAgentPhone);
+        localStorage.setItem("JT360_DEVICE_TRIAL_USED", "true");
 
         setAgentInfo(info);
         setTrialStatus(data);
@@ -947,13 +959,24 @@ ${excludesText}
 </div>
 
 <div>
-  <label style={labelStyle}>Agent Phone / M-Pesa Number</label>
+  <label style={labelStyle}>
+    Agent Phone / M-Pesa Number
+  </label>
 
-  <input
-    style={inputStyle}
+  <PhoneInput
+    country={"ke"}
+    onlyCountries={["ke", "ug", "tz", "rw", "za"]}
     value={agentPhone}
-    placeholder="+2547XXXXXXXX"
-    onChange={(e) => setAgentPhone(e.target.value)}
+    onChange={(phone) => setAgentPhone(phone)}
+    inputStyle={{
+      width: "100%",
+      height: "56px",
+      borderRadius: "12px",
+      fontSize: "16px",
+    }}
+    containerStyle={{
+      width: "100%",
+    }}
   />
 </div>
 
