@@ -6,6 +6,7 @@ import path from "path";
 import PDFDocument from "pdfkit";
 import { Resend } from "resend";
 import { fileURLToPath } from "url";
+import axios from "axios";
 
 dotenv.config();
 
@@ -542,6 +543,38 @@ app.get("/health", (req, res) => {
     message: "Backend is healthy",
     time: new Date().toISOString(),
   });
+});
+
+app.get("/daraja/token", async (req, res) => {
+  try {
+    const consumerKey = process.env.DARAJA_CONSUMER_KEY;
+    const consumerSecret = process.env.DARAJA_CONSUMER_SECRET;
+
+    const auth = Buffer.from(`${consumerKey}:${consumerSecret}`).toString("base64");
+
+    const response = await axios.get(
+      "https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials",
+      {
+        headers: {
+          Authorization: `Basic ${auth}`,
+        },
+      }
+    );
+
+    res.json({
+      success: true,
+      access_token: response.data.access_token,
+      expires_in: response.data.expires_in,
+    });
+  } catch (error) {
+    console.error("Daraja OAuth Error:", error.response?.data || error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to generate Daraja access token.",
+      error: error.response?.data || error.message,
+    });
+  }
 });
 
 app.post("/trial/start", (req, res) => {
