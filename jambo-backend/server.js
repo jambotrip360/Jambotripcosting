@@ -647,6 +647,16 @@ app.post("/mpesa/stkpush", async (req, res) => {
   }
 });
 
+app.post("/mpesa/callback", (req, res) => {
+  console.log("========== MPESA CALLBACK ==========");
+  console.log(JSON.stringify(req.body, null, 2));
+
+  res.json({
+    ResultCode: 0,
+    ResultDesc: "Accepted",
+  });
+});
+
 app.post("/trial/start", (req, res) => {
   const { name, email, phone } = req.body || {};
 
