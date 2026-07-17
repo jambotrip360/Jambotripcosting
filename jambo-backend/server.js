@@ -577,6 +577,76 @@ app.get("/daraja/token", async (req, res) => {
   }
 });
 
+app.post("/mpesa/stkpush", async (req, res) => {
+  try {
+    const { phone, amount } = req.body;
+
+    if (!phone || !amount) {
+      return res.status(400).json({
+        success: false,
+        message: "Phone number and amount are required.",
+      });
+    }
+
+    const auth = Buffer.from(
+      `${process.env.DARAJA_CONSUMER_KEY}:${process.env.DARAJA_CONSUMER_SECRET}`
+    ).toString("base64");
+
+    const tokenResponse = await axios.get(
+      "https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials",
+      {
+        headers: {
+          Authorization: `Basic ${auth}`,
+        },
+      }
+    );
+
+    const accessToken = tokenResponse.data.access_token;
+
+    const shortcode = process.env.DARAJA_SHORTCODE;
+    const passkey = process.env.DARAJA_PASSKEY;
+
+    const timestamp = moment().format("YYYYMMDDHHmmss");
+    const password = Buffer.from(
+      shortcode + passkey + timestamp
+    ).toString("base64");
+
+    const response = await axios.post(
+      "https://api.safaricom.co.ke/mpesa/stkpush/v1/processrequest",
+      {
+        BusinessShortCode: shortcode,
+        Password: password,
+        Timestamp: timestamp,
+        TransactionType: "CustomerPayBillOnline",
+        Amount: amount,
+        PartyA: phone,
+        PartyB: shortcode,
+        PhoneNumber: phone,
+        CallBackURL: process.env.CALLBACK_URL,
+        AccountReference: "JamboTrip360",
+        TransactionDesc: "Subscription Payment",
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      }
+    );
+
+    res.json({
+      success: true,
+      data: response.data,
+    });
+  } catch (error) {
+    console.error(error.response?.data || error.message);
+
+    res.status(500).json({
+      success: false,
+      error: error.response?.data || error.message,
+    });
+  }
+});
+
 app.post("/trial/start", (req, res) => {
   const { name, email, phone } = req.body || {};
 
