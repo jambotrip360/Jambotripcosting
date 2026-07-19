@@ -674,7 +674,7 @@ app.post("/trial/start", (req, res) => {
   if (!isValidKenyaPhone(phone)) {
     return res.status(400).json({
       success: false,
-      message: "Phone must be in format +2547XXXXXXXX",
+      message: "Enter a valid Kenyan phone number, e.g. 0712345678, 0112345678, +254712345678, or +254112345678.",
     });
   }
 
