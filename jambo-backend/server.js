@@ -75,7 +75,8 @@ function isValidEmail(email) {
 }
 
 function isValidKenyaPhone(phone) {
-  return /^\+2547\d{8}$/.test(phone);
+  const cleanedPhone = String(phone || "").replace(/[\s()-]/g, "");
+  return /^(?:\+254|254|0)(?:7|1)\d{8}$/.test(cleanedPhone);
 }
 
 function nowMs() {
