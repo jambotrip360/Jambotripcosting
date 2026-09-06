@@ -7,6 +7,7 @@ import PDFDocument from "pdfkit";
 import { Resend } from "resend";
 import { fileURLToPath } from "url";
 import axios from "axios";
+import moment from "moment";
 
 dotenv.config();
 
@@ -49,6 +50,7 @@ function readData() {
     return {
       trials: {},
       unlocks: {},
+      pendingPayments: {},
     };
   }
 
@@ -58,6 +60,7 @@ function readData() {
     return {
       trials: {},
       unlocks: {},
+      pendingPayments: {},
     };
   }
 }
@@ -77,6 +80,31 @@ function isValidEmail(email) {
 function isValidKenyaPhone(phone) {
   const cleanedPhone = String(phone || "").replace(/[\s()-]/g, "");
   return /^(?:\+254|254|0)(?:7|1)\d{8}$/.test(cleanedPhone);
+}
+
+function normalizeKenyaPhone(phone) {
+  const value = String(phone ?? "")
+    .trim()
+    .replace(/\s+/g, "")
+    .replace(/-/g, "");
+
+  // +254712345678 → 254712345678
+  if (value.startsWith("+254")) {
+    return value.slice(1);
+  }
+
+  // 254712345678 → 254712345678
+  if (value.startsWith("254")) {
+    return value;
+  }
+
+  // 0712345678 → 254712345678
+  // 0112345678 → 254112345678
+  if (value.startsWith("0") && value.length === 10) {
+    return `254${value.slice(1)}`;
+  }
+
+  return value;
 }
 
 function nowMs() {
@@ -560,8 +588,7 @@ app.get("/daraja/token", async (req, res) => {
           Authorization: `Basic ${auth}`,
         },
       }
-    );
-
+    );   
     res.json({
       success: true,
       access_token: response.data.access_token,
@@ -580,14 +607,25 @@ app.get("/daraja/token", async (req, res) => {
 
 app.post("/mpesa/stkpush", async (req, res) => {
   try {
-    const { phone, amount } = req.body;
+    const { phone, email } = req.body;
+    const amount = 5000;
 
-    if (!phone || !amount) {
+    const cleanEmail = normalizeEmail(email);
+
+    if (!isValidEmail(cleanEmail)) {
       return res.status(400).json({
         success: false,
-        message: "Phone number and amount are required.",
+        message: "A valid email address is required for payment.",
       });
     }
+    if (!phone) {
+      return res.status(400).json({
+        success: false,
+        message: "Phone number is required.",
+      });
+    }
+
+    const normalizedPhone = normalizeKenyaPhone(phone);
 
     const auth = Buffer.from(
       `${process.env.DARAJA_CONSUMER_KEY}:${process.env.DARAJA_CONSUMER_SECRET}`
@@ -620,9 +658,9 @@ app.post("/mpesa/stkpush", async (req, res) => {
         Timestamp: timestamp,
         TransactionType: "CustomerPayBillOnline",
         Amount: amount,
-        PartyA: phone,
+        PartyA: normalizedPhone,
         PartyB: shortcode,
-        PhoneNumber: phone,
+        PhoneNumber: normalizedPhone,
         CallBackURL: process.env.CALLBACK_URL,
         AccountReference: "JamboTrip360",
         TransactionDesc: "Subscription Payment",
@@ -634,10 +672,28 @@ app.post("/mpesa/stkpush", async (req, res) => {
       }
     );
 
+    const checkoutRequestId = response.data.CheckoutRequestID;
+
+    const data = readData();
+
+    if (!data.pendingPayments) {
+     data.pendingPayments = {};
+}
+
+     data.pendingPayments[checkoutRequestId] = {
+     email: cleanEmail,
+     phone: normalizedPhone,
+     amount,
+     status: "pending",
+     createdAt: new Date().toISOString(),
+};
+
+     writeData(data);
+
     res.json({
-      success: true,
-      data: response.data,
-    });
+     success: true,
+     data: response.data,
+});
   } catch (error) {
     console.error(error.response?.data || error.message);
 
@@ -652,10 +708,163 @@ app.post("/mpesa/callback", (req, res) => {
   console.log("========== MPESA CALLBACK ==========");
   console.log(JSON.stringify(req.body, null, 2));
 
-  res.json({
-    ResultCode: 0,
-    ResultDesc: "Accepted",
-  });
+  try {
+    const stkCallback = req.body?.Body?.stkCallback;
+
+    if (!stkCallback) {
+      console.log("Invalid M-Pesa callback received.");
+
+      return res.json({
+        ResultCode: 0,
+        ResultDesc: "Accepted",
+      });
+    }
+
+    const {
+      ResultCode,
+      ResultDesc,
+      CheckoutRequestID,
+      CallbackMetadata,
+    } = stkCallback;
+
+    console.log("ResultCode:", ResultCode);
+    console.log("ResultDesc:", ResultDesc);
+    console.log("CheckoutRequestID:", CheckoutRequestID);
+
+    const data = readData();
+
+    if (!data.pendingPayments) {
+      data.pendingPayments = {};
+    }
+
+    const payment = data.pendingPayments[CheckoutRequestID];
+
+    if (!payment) {
+      console.log(
+        "No pending payment found for:",
+        CheckoutRequestID
+      );
+
+      return res.json({
+        ResultCode: 0,
+        ResultDesc: "Accepted",
+      });
+    }
+
+    // PAYMENT FAILED OR CANCELLED
+    if (ResultCode !== 0) {
+      payment.status = "failed";
+      payment.resultCode = ResultCode;
+      payment.resultDesc = ResultDesc;
+      payment.updatedAt = new Date().toISOString();
+
+      writeData(data);
+
+      console.log("M-Pesa payment failed:", ResultDesc);
+
+      return res.json({
+        ResultCode: 0,
+        ResultDesc: "Accepted",
+      });
+    }
+
+    // PAYMENT SUCCESSFUL
+    let metadata = {};
+
+    if (CallbackMetadata?.Item) {
+      for (const item of CallbackMetadata.Item) {
+        if (item.Name) {
+          metadata[item.Name] = item.Value;
+        }
+      }
+    }
+
+    const mpesaReceiptNumber =
+      metadata.MpesaReceiptNumber || null;
+
+    const transactionAmount =
+      metadata.Amount || null;
+
+    const transactionPhone =
+      metadata.PhoneNumber || null;
+
+    const transactionDate =
+      metadata.TransactionDate || null;
+
+    console.log("M-Pesa Receipt:", mpesaReceiptNumber);
+    console.log("Amount:", transactionAmount);
+    console.log("Phone:", transactionPhone);
+
+    if (Number(transactionAmount) !== Number(payment.amount)) {
+    payment.status = "failed";
+    payment.resultCode = ResultCode;
+    payment.resultDesc = "Payment amount does not match the expected subscription amount.";
+    payment.updatedAt = new Date().toISOString();
+
+    writeData(data);
+
+    console.log(
+        "M-Pesa amount mismatch:",
+        "Expected:",
+        payment.amount,
+        "Received:",
+        transactionAmount
+    );
+
+    return res.json({
+        ResultCode: 0,
+        ResultDesc: "Accepted",
+    });
+}
+    // Mark payment as successful
+    payment.status = "paid";
+    payment.resultCode = ResultCode;
+    payment.resultDesc = ResultDesc;
+    payment.mpesaReceiptNumber = mpesaReceiptNumber;
+    payment.transactionAmount = transactionAmount;
+    payment.transactionPhone = transactionPhone;
+    payment.transactionDate = transactionDate;
+    payment.updatedAt = new Date().toISOString();
+
+    // Unlock the account
+    if (!data.unlocks) {
+      data.unlocks = {};
+    }
+
+    data.unlocks[payment.email] = {
+      unlocked: true,
+      unlockedAt: new Date().toISOString(),
+      email: payment.email,
+      phone: payment.phone,
+      amount: payment.amount,
+      mpesaReceiptNumber,
+      checkoutRequestId: CheckoutRequestID,
+    };
+
+    writeData(data);
+
+    console.log(
+      "========== ACCOUNT UNLOCKED =========="
+    );
+    console.log("Email:", payment.email);
+    console.log("Receipt:", mpesaReceiptNumber);
+
+    res.json({
+      ResultCode: 0,
+      ResultDesc: "Accepted",
+    });
+
+  } catch (error) {
+    console.error(
+      "M-Pesa Callback Error:",
+      error.message
+    );
+
+    res.json({
+      ResultCode: 0,
+      ResultDesc: "Accepted",
+    });
+  }
 });
 
 app.post("/trial/start", (req, res) => {
@@ -890,6 +1099,92 @@ if (alreadyUnlockedByPhone?.unlocked) {
     unlocked: true,
     message: "Account unlocked successfully.",
   });
+});
+
+// ==============================
+// Calculation Endpoint
+// ==============================
+app.post("/calculate", async (req, res) => {
+  try {
+    const data = req.body || {};
+
+    // The frontend already performs all calculations.
+    // The backend simply returns them so the PDF,
+    // email and future database always use the same values.
+
+    res.json({
+      success: true,
+
+      currencyMode: data.currency || "KES",
+
+      totalTravellers:
+        Number(data.adults || 0) +
+        Number(data.children || 0),
+
+      totalNights: Number(data.totalNights || 0),
+
+      hotelTotal: Number(data.hotelTotal || 0),
+
+      hotelPerPerson: Number(data.hotelPerPerson || 0),
+
+      mainTransportTotal:
+        Number(data.mainTransportTotal || 0),
+
+      transportPerPerson:
+        Number(data.transportPerPerson || 0),
+
+      parkFeesTotal:
+        Number(data.parkFeesTotal || 0),
+
+      parkFeePerPerson:
+        Number(data.parkFeePerPerson || 0),
+
+      activitiesTotal:
+        Number(data.activitiesTotal || 0),
+
+      mealsTotal:
+        Number(data.mealsTotal || 0),
+
+      otherTransportTotal:
+        Number(data.otherTransportTotal || 0),
+
+      extrasTotal:
+        Number(data.extrasTotal || 0),
+
+      markupAmount:
+        Number(data.markupAmount || 0),
+
+      finalTotal:
+        Number(data.finalTotal || 0),
+
+      pricePerPerson:
+        Number(data.pricePerPerson || 0),
+
+      displayFinalTotal:
+        Number(data.displayFinalTotal || data.finalTotal || 0),
+
+      displayPricePerPerson:
+        Number(data.displayPricePerPerson || data.pricePerPerson || 0),
+
+      includes:
+        Array.isArray(data.includes)
+          ? data.includes
+          : [],
+
+      transportCalculationText:
+        data.transportCalculationText || ""
+    });
+
+  } catch (error) {
+
+    console.error("Calculation Error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+
+  }
 });
 
 app.post("/send-quotation", async (req, res) => {
