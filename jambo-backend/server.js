@@ -867,6 +867,51 @@ app.post("/mpesa/callback", (req, res) => {
   }
 });
 
+// CHECK M-PESA PAYMENT STATUS
+app.get("/mpesa/payment-status/:checkoutRequestId", (req, res) => {
+  try {
+    const { checkoutRequestId } = req.params;
+
+    if (!checkoutRequestId) {
+      return res.status(400).json({
+        success: false,
+        message: "CheckoutRequestID is required.",
+      });
+    }
+
+    const data = readData();
+
+    const payment = data.pendingPayments?.[checkoutRequestId];
+
+    if (!payment) {
+      return res.json({
+        success: false,
+        status: "not_found",
+        message: "Payment not found.",
+      });
+    }
+
+    return res.json({
+      success: true,
+      status: payment.status,
+      email: payment.email,
+      amount: payment.amount,
+      mpesaReceiptNumber: payment.mpesaReceiptNumber || null,
+      updatedAt: payment.updatedAt || null,
+    });
+  } catch (error) {
+    console.error(
+      "M-Pesa Payment Status Error:",
+      error.message
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to check payment status.",
+    });
+  }
+});
+
 app.post("/trial/start", (req, res) => {
   const { name, email, phone } = req.body || {};
 
