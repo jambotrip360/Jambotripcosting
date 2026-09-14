@@ -192,9 +192,9 @@ export default function App() {
   const [trialExpired, setTrialExpired] = useState(false);
 
   const [isUnlocked, setIsUnlocked] = useState(false);
-  const [activationCode, setActivationCode] = useState("");
-  const [showActivationCode, setShowActivationCode] = useState(false);
+  const [checkoutRequestId, setCheckoutRequestId] = useState("");
   const [activationLoading, setActivationLoading] = useState(false);
+  const [paymentStatus, setPaymentStatus] = useState("");
 
   const [companyName, setCompanyName] = useState("Jambo Trip 360");
   const [preparedBy, setPreparedBy] = useState("");
@@ -406,7 +406,7 @@ export default function App() {
     return {
       ...emptyCalculation,
       success: true,
-      currencyMode: clientType,
+      currencyMode: currencyMode,
       totalTravellers: travellers,
       totalNights,
       hotelTotal,
@@ -520,7 +520,34 @@ export default function App() {
       boatAdultRate,
       boatChildRate,
       markupPercent,
-      excludes: excludes.map((item) => item.text.trim()).filter(Boolean),
+      // Send frontend calculation to backend
+     hotelTotal: frontendCalculation.hotelTotal,
+     hotelPerPerson: frontendCalculation.hotelPerPerson,
+
+     mainTransportTotal: frontendCalculation.mainTransportTotal,
+     transportPerPerson: frontendCalculation.transportPerPerson,
+
+     parkFeesTotal: frontendCalculation.parkFeesTotal,
+     parkFeePerPerson: frontendCalculation.parkFeePerPerson,
+
+     activitiesTotal: frontendCalculation.activitiesTotal,
+     mealsTotal: frontendCalculation.mealsTotal,
+     otherTransportTotal: frontendCalculation.otherTransportTotal,
+     extrasTotal: frontendCalculation.extrasTotal,
+
+     markupAmount: frontendCalculation.markupAmount,
+
+     finalTotal: frontendCalculation.finalTotal,
+     pricePerPerson: frontendCalculation.pricePerPerson,
+
+     displayFinalTotal: frontendCalculation.displayFinalTotal,
+     displayPricePerPerson: frontendCalculation.displayPricePerPerson,
+
+     includes: frontendCalculation.includes,
+     transportCalculationText:
+     frontendCalculation.transportCalculationText,
+
+     excludes: excludes.map((item) => item.text.trim()).filter(Boolean),
     }),
     [
       companyName,
@@ -568,6 +595,7 @@ export default function App() {
       boatChildRate,
       markupPercent,
       excludes,
+      frontendCalculation,
     ]
   );
 
@@ -739,46 +767,133 @@ if (alreadyUsedDevice) {
   };
 
   const activateSubscription = async () => {
-    if (!agentInfo?.email || !agentInfo?.phone || !activationCode.trim()) {
-      alert("Email, phone, and activation code are required.");
-      return;
+  if (!agentInfo?.email || !agentInfo?.phone) {
+    alert("Email and phone number are required.");
+    return;
+  }
+
+  try {
+    setActivationLoading(true);
+    setPaymentStatus("Sending M-Pesa payment prompt...");
+
+    const response = await fetch(`${API_BASE}/mpesa/stkpush`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email: agentInfo.email,
+        phone: agentInfo.phone,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+      throw new Error(
+        data.message || data.error || "Unable to initiate M-Pesa payment."
+      );
     }
 
-    try {
-      setActivationLoading(true);
+    const newCheckoutRequestId = data.data?.CheckoutRequestID;
 
-      const response = await fetch(`${API_BASE}/unlock`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: agentInfo.email,
-          phone: agentInfo.phone,
-          code: activationCode.trim(),
-        }),
-      });
+    if (!newCheckoutRequestId) {
+      throw new Error("M-Pesa CheckoutRequestID was not received.");
+    }
 
-      const data = await response.json();
+    setCheckoutRequestId(newCheckoutRequestId);
+    setPaymentStatus(
+      "M-Pesa prompt sent. Please check your phone and enter your M-Pesa PIN."
+    );
 
-      if (data.success || data.unlocked) {
-        setIsUnlocked(true);
-        setTrialExpired(false);
-        setActivationCode("");
-        setTrialStatus((prev) =>
-          prev
-            ? { ...prev, allowed: true, unlocked: true, remainingMs: 0 }
-            : { allowed: true, unlocked: true, remainingMs: 0 }
+    let attempts = 0;
+    const maxAttempts = 30;
+
+    const checkPaymentStatus = async (): Promise<void> => {
+      attempts += 1;
+
+      try {
+        const statusResponse = await fetch(
+          `${API_BASE}/mpesa/payment-status/${encodeURIComponent(
+            newCheckoutRequestId
+          )}`
         );
-        setTimeLeft("Unlocked");
-        alert("✅ Activation successful");
-      } else {
-        alert(data.message || "Invalid activation code");
+
+        const statusData = await statusResponse.json();
+
+        if (statusData.status === "paid") {
+          setIsUnlocked(true);
+          setTrialExpired(false);
+
+          setTrialStatus((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  allowed: true,
+                  unlocked: true,
+                  remainingMs: 0,
+                }
+              : {
+                  allowed: true,
+                  unlocked: true,
+                  remainingMs: 0,
+                }
+          );
+
+          setTimeLeft("Unlocked");
+          setPaymentStatus(
+            `✅ Payment successful. M-Pesa receipt: ${
+              statusData.mpesaReceiptNumber || "Confirmed"
+            }`
+          );
+
+          setActivationLoading(false);
+          return;
+        }
+
+        if (statusData.status === "failed") {
+          setPaymentStatus(
+            "❌ Payment was not completed. Please try again."
+          );
+          setActivationLoading(false);
+          return;
+        }
+
+        if (attempts >= maxAttempts) {
+          setPaymentStatus(
+            "Payment confirmation is taking longer than expected. If you completed the payment, please wait a moment and refresh."
+          );
+          setActivationLoading(false);
+          return;
+        }
+
+        setTimeout(checkPaymentStatus, 3000);
+      } catch {
+        if (attempts >= maxAttempts) {
+          setPaymentStatus(
+            "Unable to confirm payment. Please check your internet connection and try again."
+          );
+          setActivationLoading(false);
+          return;
+        }
+
+        setTimeout(checkPaymentStatus, 3000);
       }
-    } catch {
-      alert("Activation failed. Please check backend connection.");
-    } finally {
-      setActivationLoading(false);
-    }
-  };
+    };
+
+    setTimeout(checkPaymentStatus, 3000);
+  } catch (error) {
+    console.error("M-Pesa activation error:", error);
+
+    setPaymentStatus(
+      error instanceof Error
+        ? error.message
+        : "Unable to start M-Pesa payment."
+    );
+
+    setActivationLoading(false);
+  }
+};
 
   const whatsappMessage = encodeURIComponent(
     `Hello, I have completed payment for Jambo Trip 360 activation.\n\nAgent Name: ${
@@ -1074,53 +1189,42 @@ ${excludesText}
             </p>
           </div>
 
-          <div style={{ marginTop: 16, textAlign: "left" }}>
-            <label style={labelStyle}>Activation Code</label>
-
-            <div style={{ position: "relative" }}>
-<input
-    type={showActivationCode ? "text" : "password"}
-    style={{
-      ...inputStyle,
-      paddingRight: 70,
-    }}
-    placeholder="Example: JAMBO-XXXX"
-    value={activationCode}
-    onChange={(e) => setActivationCode(e.target.value)}
-  />
-
+  <div style={{ marginTop: 16, textAlign: "left" }}>
   <button
-    type="button"
-    onClick={() => setShowActivationCode(!showActivationCode)}
     style={{
-      position: "absolute",
-      right: 12,
-      top: "50%",
-      transform: "translateY(-50%)",
-      border: "none",
-      background: "transparent",
-      color: "#2563EB",
-      cursor: "pointer",
-      fontWeight: 600,
+      ...primaryButton,
+      width: "100%",
+      marginTop: 10,
+      opacity: activationLoading ? 0.7 : 1,
+      cursor: activationLoading ? "not-allowed" : "pointer",
     }}
+    onClick={activateSubscription}
+    disabled={activationLoading || isUnlocked}
   >
-    {showActivationCode ? "Hide" : "Show"}
+    {isUnlocked
+      ? "✅ Activated"
+      : activationLoading
+      ? "Processing M-Pesa Payment..."
+      : "Pay KES 5,000 & Activate"}
   </button>
-</div>
 
-            <button
-              style={{
-                ...primaryButton,
-                width: "100%",
-                marginTop: 10,
-                opacity: activationLoading ? 0.7 : 1,
-              }}
-              onClick={activateSubscription}
-              disabled={activationLoading}
-            >
-              {activationLoading ? "Activating..." : "Activate"}
-            </button>
-          </div>
+  {paymentStatus && (
+    <div
+      style={{
+        marginTop: 14,
+        padding: 14,
+        borderRadius: 12,
+        background: "#F1F5F9",
+        color: "#334155",
+        fontSize: 14,
+        lineHeight: 1.5,
+        textAlign: "center",
+      }}
+    >
+      {paymentStatus}
+    </div>
+  )}
+</div>
             <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap", marginTop: 20 }}>
               {whatsappLink ? (
                 <a href={whatsappLink} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
@@ -1557,6 +1661,45 @@ ${excludesText}
           </div>
         </div>
       </div>
+   {/* Jambo Trip 360 Support */}
+<div
+  style={{
+    marginTop: 24,
+    padding: "20px",
+    textAlign: "center",
+    borderTop: "1px solid #e2e8f0",
+    color: "#64748b",
+    fontSize: 14,
+  }}
+>
+  <div
+    style={{
+      fontWeight: 800,
+      fontSize: 16,
+      color: selectedTheme.primary,
+      marginBottom: 6,
+    }}
+  >
+    Need Help?
+  </div>
+
+  <div>
+    Questions or experiencing a challenge? Contact Jambo Trip 360 Support.
+  </div>
+
+  <a
+    href="mailto:jambotrip360@gmail.com"
+    style={{
+      display: "inline-block",
+      marginTop: 8,
+      color: selectedTheme.primary,
+      fontWeight: 700,
+      textDecoration: "none",
+    }}
+  >
+    jambotrip360@gmail.com
+  </a>
+</div>
     </div>
   );
 }
