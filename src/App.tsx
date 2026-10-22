@@ -682,7 +682,7 @@ export default function App() {
       const data = await response.json();
       setTrialStatus(data);
 
-      if (data.success && (data.trialActive || data.unlocked)) {
+      if (data.success && (data.allowed || data.trialActive || data.unlocked)) {
         setIsUnlocked(Boolean(data.unlocked));
         setTrialExpired(false);
         localStorage.setItem("trialStarted", "true");
