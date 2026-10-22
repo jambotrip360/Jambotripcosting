@@ -25,6 +25,7 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 const ALLOWED_ORIGINS = [
   "https://jambotrip360.com",
   "https://www.jambotrip360.com",
+  "https://jambotripcosting.vercel.app",
   "http://localhost:5173",
 ];
 
